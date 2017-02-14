@@ -1059,6 +1059,11 @@ its window gets deleted by 'delete-other-windows'.
 windows.
 
 
+** New macro 'elisp-tests-with-temp-buffer'
+which helps writing tests for functions that should change buffers in
+specific ways or manipulate point or mark positions.
+
+---
 * Changes in Emacs 26.1 on Non-Free Operating Systems
 
 ** Intercepting hotkeys on Windows 7 and later now works better.
