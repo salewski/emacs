@@ -2030,7 +2030,7 @@ gnutls_symmetric (bool encrypting, Lisp_Object cipher,
 }
 
 DEFUN ("gnutls-symmetric-encrypt", Fgnutls_symmetric_encrypt, Sgnutls_symmetric_encrypt, 4, 5, 0,
-       doc: /* Encrypt INPUT data with symmetric CIPHER and KEY+AEAD_AUTH and IV data into a unibyte string.
+       doc: /* Encrypt INPUT with symmetric CIPHER, KEY+AEAD_AUTH, and IV to a unibyte string.
 
 Returns nil on error.
 
@@ -2054,7 +2054,7 @@ these AEAD ciphers, but it may still be omitted (nil) as well. */)
 }
 
 DEFUN ("gnutls-symmetric-decrypt", Fgnutls_symmetric_decrypt, Sgnutls_symmetric_decrypt, 4, 5, 0,
-       doc: /* Decrypt INPUT data with symmetric CIPHER and KEY+AEAD_AUTH and IV data into a unibyte string.
+       doc: /* Decrypt INPUT with symmetric CIPHER, KEY+AEAD_AUTH, and IV to a unibyte string.
 
 Returns nil on error.
 
