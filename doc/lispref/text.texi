@@ -4511,8 +4511,6 @@ It should be somewhat more efficient on larger buffers than
 @cindex symmetric cipher
 @cindex cipher, symmetric
 
-TODO: without autoconf macros, we have to require 3.4
-
 If compiled with GnuTLS, Emacs offers built-in cryptographic support.
 Following the GnuTLS API terminology, the available tools are digests,
 MACs, symmetric ciphers, and AEAD ciphers.
