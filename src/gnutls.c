@@ -1768,7 +1768,6 @@ gnutls_symmetric_aead (bool encrypting, gnutls_cipher_algorithm_t gca,
         str = "unknown";
       error ("GnuTLS AEAD cipher %s/%s initialization failed: %s",
              gnutls_cipher_get_name (gca), desc, str);
-      return Qnil;
     }
 
   size_t storage_length = isize + gnutls_cipher_get_tag_size (gca);
@@ -1789,10 +1788,7 @@ gnutls_symmetric_aead (bool encrypting, gnutls_cipher_algorithm_t gca,
       const char* adata = extract_data_from_object (aead_auth, &astart_byte, &aend_byte);
 
       if (adata == NULL)
-        {
-          error ("GnuTLS AEAD cipher auth extraction failed");
-          return Qnil;
-        }
+        error ("GnuTLS AEAD cipher auth extraction failed");
 
       aead_auth_data = adata;
       aead_auth_size = aend_byte - astart_byte;
@@ -1804,14 +1800,11 @@ gnutls_symmetric_aead (bool encrypting, gnutls_cipher_algorithm_t gca,
     expected_remainder = gnutls_cipher_get_tag_size (gca);
 
   if ((isize - expected_remainder) % gnutls_cipher_get_block_size (gca) != 0)
-    {
-      error ("GnuTLS AEAD cipher %s/%s input block length %ld was not a "
-             "multiple of the required %ld plus the expected tag remainder %ld",
-             gnutls_cipher_get_name (gca), desc,
-             (long) isize, (long) gnutls_cipher_get_block_size (gca),
-             (long) expected_remainder);
-      return Qnil;
-    }
+    error ("GnuTLS AEAD cipher %s/%s input block length %ld was not a "
+           "multiple of the required %ld plus the expected tag remainder %ld",
+           gnutls_cipher_get_name (gca), desc,
+           (long) isize, (long) gnutls_cipher_get_block_size (gca),
+           (long) expected_remainder);
 
   if (encrypting)
     ret = gnutls_aead_cipher_encrypt (acipher,
@@ -1838,20 +1831,16 @@ gnutls_symmetric_aead (bool encrypting, gnutls_cipher_algorithm_t gca,
         str = "unknown";
       error ("GnuTLS AEAD cipher %s %sion failed: %s",
              gnutls_cipher_get_name (gca), desc, str);
-      return Qnil;
     }
 
   gnutls_aead_cipher_deinit (acipher);
 
-  // TODO: switch this to use a resize_string_data() function when
-  // that's provided in the C core, to avoid the extra copy.
   Lisp_Object output = make_unibyte_string ((const char *)storage, storage_length);
   memset (storage, 0, storage_length);
   SAFE_FREE ();
   return list2 (output, actual_iv);
 #else
   error ("GnuTLS AEAD cipher %ld was invalid or not found", (long) gca);
-  return Qnil;
 #endif
 }
 
@@ -1901,46 +1890,31 @@ gnutls_symmetric (bool encrypting, Lisp_Object cipher,
     }
 
   if (gca == GNUTLS_CIPHER_UNKNOWN)
-    {
-      error ("GnuTLS cipher was invalid or not found");
-      return Qnil;
-    }
+    error ("GnuTLS cipher was invalid or not found");
 
   ptrdiff_t kstart_byte, kend_byte;
   const char* kdata = extract_data_from_object (key, &kstart_byte, &kend_byte);
 
   if (kdata == NULL)
-    {
-      error ("GnuTLS cipher key extraction failed");
-      return Qnil;
-    }
+    error ("GnuTLS cipher key extraction failed");
 
   if ((kend_byte - kstart_byte) != gnutls_cipher_get_key_size (gca))
-    {
-      error ("GnuTLS cipher %s/%s key length %ld was not equal to "
-             "the required %ld",
-             gnutls_cipher_get_name (gca), desc,
-             kend_byte - kstart_byte, (long) gnutls_cipher_get_key_size (gca));
-      return Qnil;
-    }
+    error ("GnuTLS cipher %s/%s key length %ld was not equal to "
+           "the required %ld",
+           gnutls_cipher_get_name (gca), desc,
+           kend_byte - kstart_byte, (long) gnutls_cipher_get_key_size (gca));
 
   ptrdiff_t vstart_byte, vend_byte;
   const char* vdata = extract_data_from_object (iv, &vstart_byte, &vend_byte);
 
   if (vdata == NULL)
-    {
-      error ("GnuTLS cipher IV extraction failed");
-      return Qnil;
-    }
+    error ("GnuTLS cipher IV extraction failed");
 
   if ((vend_byte - vstart_byte) != gnutls_cipher_get_iv_size (gca))
-    {
-      error ("GnuTLS cipher %s/%s IV length %ld was not equal to "
-             "the required %ld",
-             gnutls_cipher_get_name (gca), desc,
-             vend_byte - vstart_byte, (long) gnutls_cipher_get_iv_size (gca));
-      return Qnil;
-    }
+    error ("GnuTLS cipher %s/%s IV length %ld was not equal to "
+           "the required %ld",
+           gnutls_cipher_get_name (gca), desc,
+           vend_byte - vstart_byte, (long) gnutls_cipher_get_iv_size (gca));
 
   Lisp_Object actual_iv = make_unibyte_string (vdata, vend_byte - vstart_byte);
 
@@ -1948,10 +1922,7 @@ gnutls_symmetric (bool encrypting, Lisp_Object cipher,
   const char* idata = extract_data_from_object (input, &istart_byte, &iend_byte);
 
   if (idata == NULL)
-    {
-      error ("GnuTLS cipher input extraction failed");
-      return Qnil;
-    }
+    error ("GnuTLS cipher input extraction failed");
 
   /* Is this an AEAD cipher? */
   if (gnutls_cipher_get_tag_size (gca) > 0)
@@ -1968,13 +1939,10 @@ gnutls_symmetric (bool encrypting, Lisp_Object cipher,
     }
 
   if ((iend_byte - istart_byte) % gnutls_cipher_get_block_size (gca) != 0)
-    {
-      error ("GnuTLS cipher %s/%s input block length %ld was not a multiple "
-             "of the required %ld",
-             gnutls_cipher_get_name (gca), desc,
-             iend_byte - istart_byte, (long) gnutls_cipher_get_block_size (gca));
-      return Qnil;
-    }
+    error ("GnuTLS cipher %s/%s input block length %ld was not a multiple "
+           "of the required %ld",
+           gnutls_cipher_get_name (gca), desc,
+           iend_byte - istart_byte, (long) gnutls_cipher_get_block_size (gca));
 
   gnutls_cipher_hd_t hcipher;
   gnutls_datum_t key_datum = { (unsigned char*) kdata, kend_byte - kstart_byte };
@@ -1988,7 +1956,6 @@ gnutls_symmetric (bool encrypting, Lisp_Object cipher,
         str = "unknown";
       error ("GnuTLS cipher %s/%s initialization failed: %s",
              gnutls_cipher_get_name (gca), desc, str);
-      return Qnil;
     }
 
   /* Note that this will not support streaming block mode. */
@@ -2021,7 +1988,6 @@ gnutls_symmetric (bool encrypting, Lisp_Object cipher,
         str = "unknown";
       error ("GnuTLS cipher %s %sion failed: %s",
              gnutls_cipher_get_name (gca), desc, str);
-      return Qnil;
     }
 
   gnutls_cipher_deinit (hcipher);
@@ -2202,10 +2168,7 @@ itself. */)
     }
 
   if (gma == GNUTLS_MAC_UNKNOWN)
-    {
-      error ("GnuTLS MAC-method was invalid or not found");
-      return Qnil;
-    }
+    error ("GnuTLS MAC-method was invalid or not found");
 
   ptrdiff_t kstart_byte, kend_byte;
   const char* kdata = extract_data_from_object (key, &kstart_byte, &kend_byte);
@@ -2214,10 +2177,7 @@ itself. */)
                           kdata + kstart_byte, kend_byte - kstart_byte);
 
   if (kdata == NULL)
-    {
-      error ("GnuTLS MAC key extraction failed");
-      return Qnil;
-    }
+    error ("GnuTLS MAC key extraction failed");
 
   if (ret < GNUTLS_E_SUCCESS)
     {
@@ -2226,16 +2186,12 @@ itself. */)
         str = "unknown";
       error ("GnuTLS MAC %s initialization failed: %s",
              gnutls_mac_get_name (gma), str);
-      return Qnil;
     }
 
   ptrdiff_t istart_byte, iend_byte;
   const char* idata = extract_data_from_object (input, &istart_byte, &iend_byte);
   if (idata == NULL)
-    {
-      error ("GnuTLS MAC input extraction failed");
-      return Qnil;
-    }
+    error ("GnuTLS MAC input extraction failed");
 
   size_t digest_length = gnutls_hmac_get_len (gma);
   Lisp_Object digest = make_uninit_string (digest_length);
@@ -2254,7 +2210,6 @@ itself. */)
         str = "unknown";
       error ("GnuTLS MAC %s application failed: %s",
              gnutls_mac_get_name (gma), str);
-      return Qnil;
     }
 
   gnutls_hmac_output (hmac, SSDATA (digest));
@@ -2305,10 +2260,7 @@ the number itself. */)
     }
 
   if (gda == GNUTLS_DIG_UNKNOWN)
-    {
-      error ("GnuTLS digest-method was invalid or not found");
-      return Qnil;
-    }
+    error ("GnuTLS digest-method was invalid or not found");
 
   gnutls_hash_hd_t hash;
   ret = gnutls_hash_init (&hash, gda);
@@ -2319,7 +2271,6 @@ the number itself. */)
       if (!str)
         str = "unknown";
       error ("GnuTLS digest initialization failed: %s", str);
-      return Qnil;
     }
 
   size_t digest_length = gnutls_hash_get_len (gda);
@@ -2328,10 +2279,7 @@ the number itself. */)
   ptrdiff_t istart_byte, iend_byte;
   const char* idata = extract_data_from_object (input, &istart_byte, &iend_byte);
   if (idata == NULL)
-    {
-      error ("GnuTLS digest input extraction failed");
-      return Qnil;
-    }
+    error ("GnuTLS digest input extraction failed");
 
   ret = gnutls_hash (hash, idata + istart_byte, iend_byte - istart_byte);
 
@@ -2343,7 +2291,6 @@ the number itself. */)
       if (!str)
         str = "unknown";
       error ("GnuTLS digest application failed: %s", str);
-      return Qnil;
     }
 
   gnutls_hash_output (hash, SSDATA (digest));

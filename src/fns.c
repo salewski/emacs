@@ -4926,10 +4926,7 @@ extract_data_from_object (Lisp_Object spec,
       // Format: (iv-auto REQUIRED-LENGTH)
 
       if (! INTEGERP (start))
-        {
-          error ("Without a length, iv-auto can't be used. See manual.");
-          object = Qnil;
-        }
+        error ("Without a length, iv-auto can't be used. See manual.");
       else
         {
           /* Make sure the value of "start" doesn't change.  */
@@ -4942,7 +4939,6 @@ extract_data_from_object (Lisp_Object spec,
         }
 #else
       error ("GnuTLS integration is not available, so iv-auto can't be used.");
-      object = Qnil;
 #endif
     }
 
@@ -4959,7 +4955,7 @@ secure_hash (Lisp_Object algorithm, Lisp_Object object, Lisp_Object start,
 {
   ptrdiff_t start_byte, end_byte;
   int digest_size;
-  void (*hash_func) (const char *, size_t, void *);
+  void *(*hash_func) (const char *, size_t, void *);
   Lisp_Object digest;
 
   CHECK_SYMBOL (algorithm);
