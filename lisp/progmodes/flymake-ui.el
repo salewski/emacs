@@ -111,13 +111,12 @@ See `flymake-error-bitmap' and `flymake-warning-bitmap'."
 (defcustom flymake-backends '()
   "Ordered list of backends providing syntax check information for a buffer.
 Value is an alist of conses (PREDICATE . CHECKER). Both PREDICATE
-and CHECKER are functions called with a single argument, the
-buffer in which `flymake-mode' was enabled. PREDICATE is expected
-to (quickly) return t or nil if the buffer can be syntax checked
-by CHECKER, which in can performs more morose operations,
-possibly asynchronously."
-  :group 'flymake
-  :type 'alist)
+and CHECKER are functions called without arguments and within the
+the buffer in which `flymake-mode' was enabled. PREDICATE is
+expected to (quickly) return t or nil if the buffer can be
+syntax-checked by CHECKER, in which case it can then perform
+more morose operations, possibly asynchronously."  :group
+'flymake :type 'alist)
 
 (defvar-local flymake-timer nil
   "Timer for starting syntax check.")
@@ -457,12 +456,10 @@ For the format of LINE-ERR-INFO, see `flymake-ler-make-ler'."
   "The currently active backend selected by `flymake-mode'")
 
 (defun flymake--can-syntax-check-buffer (buffer)
-  (let ((all flymake-backends)
-        (candidate))
-    (catch 'done
-      (while (setq candidate (pop all))
-        (when (with-current-buffer buffer (funcall (car candidate)))
-          (throw 'done (cdr candidate)))))))
+  (catch 'done
+    (dolist (candidate flymake-backends)
+      (when (with-current-buffer buffer (funcall (car candidate)))
+      (throw 'done (cdr candidate))))))
 
 (defun flymake--start-syntax-check ()
   (funcall flymake--backend))
