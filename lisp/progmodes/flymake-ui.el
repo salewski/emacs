@@ -133,9 +133,6 @@ more morose operations, possibly asynchronously."  :group
 (defvar-local flymake-err-info nil
   "Sorted list of line numbers and lists of err info in the form (file, err-text).")
 
-(defvar-local flymake-new-err-info nil
-  "Same as `flymake-err-info', effective when a syntax check is in progress.")
-
 (defun flymake-log (level text &rest args)
   "Log a message at level LEVEL.
 If LEVEL is higher than `flymake-log-level', the message is
@@ -452,6 +449,26 @@ For the format of LINE-ERR-INFO, see `flymake-ler-make-ler'."
   (flymake-log 0 "switched OFF Flymake mode for buffer %s due to fatal status %s, warning %s"
                (buffer-name) status warning))
 
+(defun flymake-fix-line-numbers (err-info-list min-line max-line)
+  "Replace line numbers with fixed value.
+If line-numbers is less than MIN-LINE, set line numbers to MIN-LINE.
+If line numbers is greater than MAX-LINE, set line numbers to MAX-LINE.
+The reason for this fix is because some compilers might report
+line number outside the file being compiled."
+  (let* ((count     (length err-info-list))
+	 (err-info  nil)
+	 (line      0))
+    (while (> count 0)
+      (setq err-info (nth (1- count) err-info-list))
+      (setq line (flymake-er-get-line err-info))
+      (when (or (< line min-line) (> line max-line))
+	(setq line (if (< line min-line) min-line max-line))
+	(setq err-info-list (flymake-set-at err-info-list (1- count)
+					    (flymake-er-make-er line
+								(flymake-er-get-line-err-info-list err-info)))))
+      (setq count (1- count))))
+  err-info-list)
+
 (defvar-local flymake--backend nil
   "The currently active backend selected by `flymake-mode'")
 
@@ -462,6 +479,7 @@ For the format of LINE-ERR-INFO, see `flymake-ler-make-ler'."
       (throw 'done (cdr candidate))))))
 
 (defun flymake--start-syntax-check ()
+  (setq flymake-check-start-time (float-time))
   (funcall flymake--backend))
 
 ;;;###autoload

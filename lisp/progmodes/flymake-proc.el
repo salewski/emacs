@@ -120,7 +120,7 @@ NAME is the file name function to use, default `flymake-get-real-file-name'."
     (flymake-log 3 "file %s, init=%s" file-name (car mode-and-masks))
     mode-and-masks))
 
-(defun flymake-proc-can-syntax-check-buffer ()
+(defun flymake-can-syntax-check-buffer ()
   "Determine whether we can syntax check current buffer.
 Return nil if we cannot, non-nil if
 we can."
@@ -480,6 +480,9 @@ It's flymake process filter."
           (flymake-parse-err-lines
            flymake-new-err-info lines))))
 
+(defvar-local flymake-new-err-info nil
+  "Same as `flymake-err-info', effective when a syntax check is in progress.")
+
 (defun flymake-parse-residual ()
   "Parse residual if it's non empty."
   (when flymake-output-residual
@@ -488,26 +491,6 @@ It's flymake process filter."
            flymake-new-err-info
            (list flymake-output-residual)))
     (setq flymake-output-residual nil)))
-
-(defun flymake-fix-line-numbers (err-info-list min-line max-line)
-  "Replace line numbers with fixed value.
-If line-numbers is less than MIN-LINE, set line numbers to MIN-LINE.
-If line numbers is greater than MAX-LINE, set line numbers to MAX-LINE.
-The reason for this fix is because some compilers might report
-line number outside the file being compiled."
-  (let* ((count     (length err-info-list))
-	 (err-info  nil)
-	 (line      0))
-    (while (> count 0)
-      (setq err-info (nth (1- count) err-info-list))
-      (setq line (flymake-er-get-line err-info))
-      (when (or (< line min-line) (> line max-line))
-	(setq line (if (< line min-line) min-line max-line))
-	(setq err-info-list (flymake-set-at err-info-list (1- count)
-					    (flymake-er-make-er line
-								(flymake-er-get-line-err-info-list err-info)))))
-      (setq count (1- count))))
-  err-info-list)
 
 (defun flymake-parse-err-lines (err-info-list lines)
   "Parse err LINES, store info in ERR-INFO-LIST."
@@ -716,7 +699,7 @@ Return its components if so, nil otherwise."
     (error
      (flymake-log 1 "Failed to delete dir %s, error ignored" dir-name))))
 
-(defun flymake-proc-start-syntax-check ()
+(defun flymake-start-syntax-check ()
   "Start syntax checking for current buffer."
   (interactive)
   (flymake-log 3 "flymake is running: %s" flymake-is-running)
@@ -759,7 +742,6 @@ Return its components if so, nil otherwise."
 
         (setq flymake-is-running t)
         (setq flymake-last-change-time nil)
-        (setq flymake-check-start-time (float-time))
 
         (flymake-report-status nil "*")
         (flymake-log 2 "started process %d, command=%s, dir=%s"
@@ -1089,9 +1071,9 @@ Use CREATE-TEMP-F for creating temp copy."
 ;;;; Hook onto flymake-ui
 
 (add-to-list 'flymake-backends
-             `(flymake-proc-can-syntax-check-buffer
+             `(flymake-can-syntax-check-buffer
                .
-               flymake-proc-start-syntax-check))
+               flymake-start-syntax-check))
 
 (provide 'flymake-proc)
 ;;; flymake-proc.el ends here
