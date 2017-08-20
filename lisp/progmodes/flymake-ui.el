@@ -114,9 +114,10 @@ Value is an alist of conses (PREDICATE . CHECKER). Both PREDICATE
 and CHECKER are functions called without arguments and within the
 the buffer in which `flymake-mode' was enabled. PREDICATE is
 expected to (quickly) return t or nil if the buffer can be
-syntax-checked by CHECKER, in which case it can then perform
-more morose operations, possibly asynchronously."  :group
-'flymake :type 'alist)
+syntax-checked by CHECKER, in which case it can then perform more
+morose operations, possibly asynchronously. After it's done,
+CHECKER must invoke `flymake-report' to display the results of
+the syntax check." :group 'flymake :type 'alist)
 
 (defvar-local flymake-timer nil
   "Timer for starting syntax check.")
@@ -468,6 +469,23 @@ line number outside the file being compiled."
 								(flymake-er-get-line-err-info-list err-info)))))
       (setq count (1- count))))
   err-info-list)
+
+(defun flymake-report (diagnostics)
+  (save-restriction
+    (widen)
+    (setq flymake-err-info
+          (flymake-fix-line-numbers
+           diagnostics 1 (count-lines (point-min) (point-max))))
+    (flymake-delete-own-overlays)
+    (flymake-highlight-err-lines flymake-err-info)
+    (let ((err-count (flymake-get-err-count flymake-err-info "e"))
+          (warn-count (flymake-get-err-count flymake-err-info "w")))
+      (flymake-log 2 "%s: %d error(s), %d warning(s) in %.2f second(s)"
+                   (buffer-name) err-count warn-count
+                   (- (float-time) flymake-check-start-time))
+      (if (and (equal 0 err-count) (equal 0 warn-count))
+          (flymake-report-status "" "")
+        (flymake-report-status (format "%d/%d" err-count warn-count) "")))))
 
 (defvar-local flymake--backend nil
   "The currently active backend selected by `flymake-mode'")
