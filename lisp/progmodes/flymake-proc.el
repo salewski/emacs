@@ -902,7 +902,7 @@ Return full-name.  Names are real, not patched."
                                    (file-name-directory source-file-name))
              base-dir)))
 
-(defun flymake-proc--get-make-cmdline (source base-dir)
+(defun flymake-proc-get-make-cmdline (source base-dir)
   (list "make"
 	(list "-s"
 	      "-C"
