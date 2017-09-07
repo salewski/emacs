@@ -149,7 +149,12 @@ are the string substitutions (see the function `format')."
 (define-obsolete-function-alias 'flymake-ler-make 'flymake-make-diagnostic "26.1"
   "Constructor for objects of type `flymake--diag'")
 
-(cl-defun flymake--overlays (&key filter compare beg end key)
+(cl-defun flymake--overlays (&key beg end filter compare key)
+  "Get flymake-related overlays.
+If BEG is non-nil and END is nil, consider only `overlays-at'
+BEG. Otherwise consider `overlays-in' the region comprised by BEG
+and END, defaulting to the whole buffer.  Remove all that do not
+verify FILTER, sort them by COMPARE (using KEY)."
   (cl-remove-if-not
    (lambda (ov)
      (and (overlay-get ov 'flymake-overlay)
@@ -158,8 +163,10 @@ are the string substitutions (see the function `format')."
                     ((symbolp filter) (overlay-get ov filter))))))
    (save-restriction
      (widen)
-     (let ((ovs (overlays-in (or beg (point-min))
-                             (or end (point-max)))))
+     (let ((ovs (if (and beg (null end))
+                    (overlays-at beg t)
+                  (overlays-in (or beg (point-min))
+                               (or end (point-max))))))
        (if compare
            (cl-sort ovs compare :key (or key
                                          #'identity))
@@ -207,13 +214,22 @@ are the string substitutions (see the function `format')."
                (point)))))))))
 
 (defvar flymake-diagnostic-types-alist
-  `(("e" . ((severity . ,(warning-numeric-level :error))
-            (face . flymake-errline)
-            (bitmap . (,flymake-error-bitmap error))))
-    ("w" . ((severity . ,(warning-numeric-level :warning))
-            (face . flymake-warnline)
-            (bitmap . ,flymake-warning-bitmap))))
+  `((("e" :error error)
+     . ((severity . ,(warning-numeric-level :error))
+        (face . flymake-errline)
+        (bitmap . (,flymake-error-bitmap error))))
+    (("w" :warning warning)
+     . ((severity . ,(warning-numeric-level :warning))
+        (face . flymake-warnline)
+        (bitmap . ,flymake-warning-bitmap))))
   "Alist of characteristics of flymake error types.")
+
+(defun flymake--type-alist (diagnostic-type)
+  (assoc-default diagnostic-type
+                 flymake-diagnostic-types-alist
+                 (lambda (entry key)
+                   (or (equal key entry)
+                       (member key entry)))))
 
 (defun flymake--diag-errorp (diag)
   "Tell if DIAG is a flymake error or something else"
@@ -223,22 +239,19 @@ are the string substitutions (see the function `format')."
 (defun flymake--severity (diagnostic)
   (or (assoc-default
        'severity
-       (assoc-default (flymake--diag-type diagnostic)
-                      flymake-diagnostic-types-alist))
+       (flymake--type-alist (flymake--diag-type diagnostic)))
       (warning-numeric-level :warning)))
 
 (defun flymake--face (diagnostic)
   (assoc-default
    'face
-   (assoc-default (flymake--diag-type diagnostic)
-                  flymake-diagnostic-types-alist)))
+   (flymake--type-alist (flymake--diag-type diagnostic))))
 
 (defun flymake--fringe-overlay-spec (diagnostic)
   (let ((bitmap
          (assoc-default
           'bitmap
-          (assoc-default (flymake--diag-type diagnostic)
-                         flymake-diagnostic-types-alist))))
+          (flymake--type-alist (flymake--diag-type diagnostic)))))
     (and bitmap
          flymake-fringe-indicator-position
          (propertize "!" 'display
@@ -251,30 +264,19 @@ are the string substitutions (see the function `format')."
   "Highlight buffer with info in DIAGNOSTIC."
   (pcase-let* ((`(,beg . ,end) (flymake--diag-region diagnostic))
                (severity (flymake--severity diagnostic))
-               (face (flymake--face diagnostic))
-               (fov ; "fringe-overlay"
-                (cl-find-if (lambda (ov)
-                              (overlay-get ov 'flymake--fringe-overlay))
-                            (overlays-at beg))))
-    (cond ((and fov
-                (> severity
-                   (overlay-get fov 'flymake--severity)))
-           (overlay-put fov 'before-string
-                        (flymake--fringe-overlay-spec diagnostic))
-           (overlay-put fov 'flymake--severity severity))
-          ((null fov)
-           (setq fov (make-overlay beg (1+ beg)))
-           (overlay-put fov 'flymake--fringe-overlay t)
-           (overlay-put fov 'before-string
-                        (flymake--fringe-overlay-spec diagnostic))
-           (overlay-put fov 'evaporate t)
-           (overlay-put fov 'flymake--severity severity)
-           (overlay-put fov 'flymake-overlay  t)
-           (overlay-put fov 'priority 100)))
+               (face (flymake--face diagnostic)))
     (let ((ov (make-overlay beg end)))
+      (overlay-put ov 'before-string
+                   (flymake--fringe-overlay-spec diagnostic))
       (overlay-put ov 'face face)
       (overlay-put ov 'help-echo
-                   (flymake--diag-text diagnostic))
+                   (lambda (_window _ov pos)
+                     (mapconcat
+                      (lambda (ov)
+                        (let ((diag (overlay-get ov 'flymake--diagnostic)))
+                          (flymake--diag-text diag)))
+                      (flymake--overlays :beg pos)
+                      "\n")))
       (overlay-put ov 'priority (+ 100 severity))
       (overlay-put ov 'evaporate t)
       (overlay-put ov 'flymake-overlay t)
