@@ -33,6 +33,8 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'thingatpt) ; end-of-thing
+(require 'warnings) ; warning-numeric-level
 
 (defgroup flymake nil
   "Universal on-the-fly syntax checker."
@@ -141,57 +143,13 @@ are the string substitutions (see the function `format')."
       (let* ((msg (apply #'format-message text args)))
 	(message "%s" msg))))
 
-(cl-defstruct (flymake-ler
-               (:constructor flymake-ler-make))
+(cl-defstruct (flymake--diag
+               (:constructor flymake-make-diagnostic))
   file line col type text full-file)
+(define-obsolete-function-alias 'flymake-ler-make 'flymake-make-diagnostic "26.1"
+  "Constructor for objects of type `flymake--diag'")
 
-(defun flymake-ler-errorp (diag)
-  "Tell if DIAG is a flymake error or something else"
-  (string= "e" (flymake-ler-type diag)))
-
-(defun flymake--place-overlay (beg end tooltip-text face bitmap diag)
-  "Place a flymake overlay in range BEG and END.
-Make a flymake fringe overlay for the line at BEG, if needed."
-  (let* ((fringe-overlay
-          (or (cl-find-if (lambda (ov)
-                            (overlay-get ov 'flymake--fringe-overlay))
-                          (overlays-at beg))
-              (make-overlay beg (1+ beg)))))
-    (let ((ov fringe-overlay))
-      (overlay-put ov 'help-echo
-                   (concat tooltip-text "\n"
-                           (overlay-get ov 'help-echo)))
-      (overlay-put ov 'before-string
-                   (and flymake-fringe-indicator-position
-                        (propertize "!" 'display
-                                    (cons flymake-fringe-indicator-position
-                                          (if (listp bitmap)
-                                              bitmap
-                                            (list bitmap))
-                                          ))))
-      (overlay-put ov 'evaporate t)
-      (overlay-put ov 'flymake-overlay  t)
-      (overlay-put ov 'priority 100)
-      ov)
-    (let ((ov (make-overlay beg end)))
-      (overlay-put ov 'face face)
-      (overlay-put ov 'help-echo
-                   (concat tooltip-text "\n"
-                           (overlay-get ov 'help-echo)))
-      (overlay-put ov 'evaporate t)
-      (overlay-put ov 'flymake-overlay t)
-      (overlay-put ov 'flymake--diagnostic diag))
-    (cl-loop for i from 0
-             for overlay in
-             (flymake--overlays
-              'flymake--diagnostic
-              (lambda (_ov1 ov2)
-                (flymake-ler-errorp
-                 (overlay-get ov2 'flymake--diagnostic)))
-              beg end)
-             do (overlay-put overlay 'priority (+ 100 i)))))
-
-(defun flymake--overlays (&optional filter compare beg end)
+(cl-defun flymake--overlays (&key filter compare beg end key)
   (cl-remove-if-not
    (lambda (ov)
      (and (overlay-get ov 'flymake-overlay)
@@ -203,9 +161,8 @@ Make a flymake fringe overlay for the line at BEG, if needed."
      (let ((ovs (overlays-in (or beg (point-min))
                              (or end (point-max)))))
        (if compare
-           (cl-sort ovs
-                    compare
-                    :key #'overlay-start)
+           (cl-sort ovs compare :key (or key
+                                         #'identity))
          ovs)))))
 
 (defun flymake-delete-own-overlays ()
@@ -230,27 +187,99 @@ Make a flymake fringe overlay for the line at BEG, if needed."
   :version "24.4"
   :group 'flymake)
 
-(defun flymake--highlight-line (diagnostic)
-  "Highlight buffer with info in DIAGNOSTIC.
-Reuse overlays if necessary
-Perhaps use the message text as a hint to enhance highlighting."
+(defun flymake--diag-region (diagnostic)
   (save-excursion
     (goto-char (point-min))
-    (let ((line-no (flymake-ler-line diagnostic)))
-      (forward-line (1- line-no))
-      (pcase-let* ((beg (progn (back-to-indentation) (point)))
-                   (end (progn
-                          (end-of-line)
-                          (skip-chars-backward " \t\f\t\n" beg)
-                          (if (eq (point) beg)
-                              (line-beginning-position 2)
-                            (point))))
-                   (tooltip-text (flymake-ler-text diagnostic))
-                   (`(,face ,bitmap)
-                    (if (equal "e" (flymake-ler-type diagnostic))
-                        (list 'flymake-errline flymake-error-bitmap)
-                      (list 'flymake-warnline flymake-warning-bitmap))))
-        (flymake--place-overlay beg end tooltip-text face bitmap diagnostic)))))
+    (let ((line (flymake--diag-line diagnostic))
+          (col (flymake--diag-col diagnostic)))
+      (forward-line (1- line))
+      (if col
+          (cons (progn (forward-char (1- col)) (point))
+                (end-of-thing 'sexp))
+        (let ((beg (progn (back-to-indentation) (point))))
+          (cons
+           beg
+           (progn
+             (end-of-line)
+             (skip-chars-backward " \t\f\t\n" beg)
+             (if (eq (point) beg)
+                 (line-beginning-position 2)
+               (point)))))))))
+
+(defvar flymake-diagnostic-types-alist
+  `(("e" . ((severity . ,(warning-numeric-level :error))
+            (face . flymake-errline)
+            (bitmap . (,flymake-error-bitmap error))))
+    ("w" . ((severity . ,(warning-numeric-level :warning))
+            (face . flymake-warnline)
+            (bitmap . ,flymake-warning-bitmap))))
+  "Alist of characteristics of flymake error types.")
+
+(defun flymake--diag-errorp (diag)
+  "Tell if DIAG is a flymake error or something else"
+  (let ((sev (flymake--severity diag)))
+    (= sev (warning-numeric-level :error))))
+
+(defun flymake--severity (diagnostic)
+  (or (assoc-default
+       'severity
+       (assoc-default (flymake--diag-type diagnostic)
+                      flymake-diagnostic-types-alist))
+      (warning-numeric-level :warning)))
+
+(defun flymake--face (diagnostic)
+  (assoc-default
+   'face
+   (assoc-default (flymake--diag-type diagnostic)
+                  flymake-diagnostic-types-alist)))
+
+(defun flymake--fringe-overlay-spec (diagnostic)
+  (let ((bitmap
+         (assoc-default
+          'bitmap
+          (assoc-default (flymake--diag-type diagnostic)
+                         flymake-diagnostic-types-alist))))
+    (and bitmap
+         flymake-fringe-indicator-position
+         (propertize "!" 'display
+                     (cons flymake-fringe-indicator-position
+                           (if (listp bitmap)
+                               bitmap
+                             (list bitmap)))))))
+
+(defun flymake--highlight-line (diagnostic)
+  "Highlight buffer with info in DIAGNOSTIC."
+  (pcase-let* ((`(,beg . ,end) (flymake--diag-region diagnostic))
+               (severity (flymake--severity diagnostic))
+               (face (flymake--face diagnostic))
+               (fov ; "fringe-overlay"
+                (cl-find-if (lambda (ov)
+                              (overlay-get ov 'flymake--fringe-overlay))
+                            (overlays-at beg))))
+    (cond ((and fov
+                (> severity
+                   (overlay-get fov 'flymake--severity)))
+           (overlay-put fov 'before-string
+                        (flymake--fringe-overlay-spec diagnostic))
+           (overlay-put fov 'flymake--severity severity))
+          ((null fov)
+           (setq fov (make-overlay beg (1+ beg)))
+           (overlay-put fov 'flymake--fringe-overlay t)
+           (overlay-put fov 'before-string
+                        (flymake--fringe-overlay-spec diagnostic))
+           (overlay-put fov 'evaporate t)
+           (overlay-put fov 'flymake--severity severity)
+           (overlay-put fov 'flymake-overlay  t)
+           (overlay-put fov 'priority 100)))
+    (let ((ov (make-overlay beg end)))
+      (overlay-put ov 'face face)
+      (overlay-put ov 'help-echo
+                   (flymake--diag-text diagnostic))
+      (overlay-put ov 'priority (+ 100 severity))
+      (overlay-put ov 'evaporate t)
+      (overlay-put ov 'flymake-overlay t)
+      (overlay-put ov 'flymake--diagnostic diagnostic))))
+
 
 (defvar-local flymake-is-running nil
   "If t, flymake syntax check process is running for the current buffer.")
@@ -275,17 +304,17 @@ Perhaps use the message text as a hint to enhance highlighting."
   "Pop up a menu with errors/warnings for current line."
   (interactive (list last-nonmenu-event))
   (let* ((diag-overlays (or
-                         (flymake--overlays 'flymake--diagnostic nil
-                                            (line-beginning-position)
-                                            (line-end-position))
+                         (flymake--overlays :filter 'flymake--diagnostic
+                                            :beg (line-beginning-position)
+                                            :end (line-end-position))
                          (user-error "No flymake problem for current line")))
          (menu (mapcar (lambda (ov)
                          (let ((diag (overlay-get ov 'flymake--diagnostic)))
                            (cons (format "%s - %s(%s)"
-                                         (flymake-ler-text diag)
-                                         (or (flymake-ler-file diag)
+                                         (flymake--diag-text diag)
+                                         (or (flymake--diag-file diag)
                                              "(no file)")
-                                         (or (flymake-ler-line diag)
+                                         (or (flymake--diag-line diag)
                                              "?"))
                                  ov)))
                        diag-overlays))
@@ -296,8 +325,8 @@ Perhaps use the message text as a hint to enhance highlighting."
                               diag-overlays))
          (title (format "Line %d: %d error(s), %d other(s)"
                         (line-number-at-pos)
-                        (cl-count-if #'flymake-ler-errorp diagnostics)
-                        (cl-count-if-not #'flymake-ler-errorp diagnostics)))
+                        (cl-count-if #'flymake--diag-errorp diagnostics)
+                        (cl-count-if-not #'flymake--diag-errorp diagnostics)))
          (choice (x-popup-menu event (list title (cons "" menu)))))
     (flymake-log 3 "choice=%s" choice)
     ;; FIXME: What is the point of going to the problem locus if we're
@@ -340,8 +369,8 @@ Perhaps use the message text as a hint to enhance highlighting."
 
 (defun flymake--fix-line-numbers (diagnostic)
   "Ensure DIAGNOSTIC has sensible error lines"
-  (setf (flymake-ler-line diagnostic)
-        (min (max (flymake-ler-line diagnostic)
+  (setf (flymake--diag-line diagnostic)
+        (min (max (flymake--diag-line diagnostic)
                   1)
              (line-number-at-pos (point-max) 'absolute))))
 
@@ -351,8 +380,8 @@ Perhaps use the message text as a hint to enhance highlighting."
     (flymake-delete-own-overlays)
     (mapc #'flymake--fix-line-numbers diagnostics)
     (mapc #'flymake--highlight-line diagnostics)
-    (let ((err-count (cl-count-if #'flymake-ler-errorp diagnostics))
-          (warn-count (cl-count-if-not #'flymake-ler-errorp diagnostics)))
+    (let ((err-count (cl-count-if #'flymake--diag-errorp diagnostics))
+          (warn-count (cl-count-if-not #'flymake--diag-errorp diagnostics)))
       (when flymake-check-start-time
         (flymake-log 2 "%s: %d error(s), %d other(s) in %.2f second(s)"
                      (buffer-name) err-count warn-count
@@ -467,8 +496,9 @@ Perhaps use the message text as a hint to enhance highlighting."
   "Go to next, or Nth next, flymake error in buffer."
   (interactive (list 1 t))
   (let* ((n (or n 1))
-         (ovs (flymake--overlays 'flymake--diagnostic
-                                 (if (cl-plusp n) #'< #'>)))
+         (ovs (flymake--overlays :filter 'flymake--diagnostic
+                                 :compare (if (cl-plusp n) #'< #'>)
+                                 :key #'overlay-start))
          (chain (cl-member-if (lambda (ov)
                                 (if (cl-plusp n)
                                     (> (overlay-start ov)
