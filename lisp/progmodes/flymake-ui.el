@@ -176,23 +176,26 @@ verify FILTER, sort them by COMPARE (using KEY)."
   "Delete all flymake overlays in BUFFER."
   (mapc #'delete-overlay (flymake--overlays)))
 
-(defface flymake-errline
+(defface flymake-error
   '((((supports :underline (:style wave)))
      :underline (:style wave :color "Red1"))
     (t
      :inherit error))
-  "Face used for marking error lines."
+  "Face used for marking error regions."
   :version "24.4"
   :group 'flymake)
 
-(defface flymake-warnline
+(defface flymake-warning
   '((((supports :underline (:style wave)))
      :underline (:style wave :color "DarkOrange"))
     (t
      :inherit warning))
-  "Face used for marking warning lines."
+  "Face used for marking warning regions."
   :version "24.4"
   :group 'flymake)
+
+(define-obsolete-face-alias 'flymake-warnline 'flymake-warning "26.1")
+(define-obsolete-face-alias 'flymake-errline 'flymake-error "26.1")
 
 (defun flymake--diag-region (diagnostic)
   (save-excursion
