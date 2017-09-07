@@ -36,10 +36,11 @@
 
 ;; Warning predicate
 (defun flymake-tests--current-face (file predicate)
-  (let ((buffer (find-file-noselect
-                 (expand-file-name file flymake-tests-data-directory)))
-        (process-environment (cons "LC_ALL=C" process-environment))
-        (i 0))
+  (let* ((file (expand-file-name file flymake-tests-data-directory))
+         (visiting (find-buffer-visiting file))
+         (buffer (or visiting (find-file-noselect file)))
+         (process-environment (cons "LC_ALL=C" process-environment))
+         (i 0))
     (unwind-protect
         (with-current-buffer buffer
           (setq-local flymake-proc-warning-predicate predicate)
@@ -59,7 +60,9 @@
             (sleep-for (+ 0.5 flymake-no-changes-timeout)))
           (flymake-goto-next-error)
           (face-at-point))
-      (and buffer (let (kill-buffer-query-functions) (kill-buffer buffer))))))
+      (and buffer
+           (not visiting)
+           (let (kill-buffer-query-functions) (kill-buffer buffer))))))
 
 (ert-deftest warning-predicate-rx-gcc ()
   "Test GCC warning via regexp predicate."
