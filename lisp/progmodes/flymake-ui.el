@@ -198,34 +198,68 @@ verify FILTER, sort them by COMPARE (using KEY)."
 (define-obsolete-face-alias 'flymake-errline 'flymake-error "26.1")
 
 (defun flymake--diag-region (diagnostic)
-  (save-excursion
-    (goto-char (point-min))
-    (let ((line (flymake--diag-line diagnostic))
-          (col (flymake--diag-col diagnostic)))
-      (forward-line (1- line))
-      (if col
-          (cons (progn (forward-char (1- col)) (point))
-                (end-of-thing 'sexp))
-        (let ((beg (progn (back-to-indentation) (point))))
-          (cons
-           beg
-           (progn
-             (end-of-line)
-             (skip-chars-backward " \t\f\t\n" beg)
-             (if (eq (point) beg)
-                 (line-beginning-position 2)
-               (point)))))))))
+  "Return the region (BEG . END) for DIAGNOSTIC.
+Or nil if the region is invalid."
+  ;; FIXME: make this a generic function
+  (condition-case-unless-debug _err
+      (save-excursion
+        (goto-char (point-min))
+        (let ((line (flymake--diag-line diagnostic))
+              (col (flymake--diag-col diagnostic)))
+          (forward-line (1- line))
+          (cl-flet ((fallback-bol
+                     () (progn (back-to-indentation) (point)))
+                    (fallback-eol
+                     (beg)
+                     (progn
+                       (end-of-line)
+                       (skip-chars-backward " \t\f\t\n" beg)
+                       (if (eq (point) beg)
+                           (line-beginning-position 2)
+                         (point)))))
+            (if col
+                (let* ((beg (progn (forward-char (1- col)) (point)))
+                       (sexp-end (ignore-errors (end-of-thing 'sexp)))
+                       (end (or sexp-end
+                                (fallback-eol beg))))
+                  (cons (if sexp-end beg (fallback-bol))
+                        end))
+              (let* ((beg (fallback-bol))
+                     (end (fallback-eol beg)))
+                (cons beg end))))))
+    (error (flymake-log 4 "Invalid region for diagnostic %s")
+           nil)))
 
 (defvar flymake-diagnostic-types-alist
   `((("e" :error error)
-     . ((severity . ,(warning-numeric-level :error))
-        (face . flymake-errline)
-        (bitmap . (,flymake-error-bitmap error))))
+     . ((category . flymake-error)))
     (("w" :warning warning)
-     . ((severity . ,(warning-numeric-level :warning))
-        (face . flymake-warnline)
-        (bitmap . ,flymake-warning-bitmap))))
-  "Alist of characteristics of flymake error types.")
+     . ((category . flymake-warning))))
+  "Alist (KEY PROPS) of properties of flymake error types.
+KEY can be anything passed as `:type' to `flymake-diag-make', or
+a list of such objects that all share PROPS.
+
+PROPS is an alist of properties that are applied, in order, to
+the overlays representing diagnostics. Every property pertaining
+to overlays, including `category', can be used (see Info
+Node `(elisp)Overlay Properties'). Some additional properties
+with flymake-specific meaning can also be used.
+
+* `bitmap' is a bitmap displayed in the fringe according to
+  `flymake-fringe-indicator-position'
+
+* `severity' is a non-negative integer specifying the
+  diagnostic's severity. The higher, the more serious. If
+  `priority' is not specified, `severity' is used to set it and
+  help sort overlapping overlays.")
+
+(put 'flymake-error 'face 'flymake-error)
+(put 'flymake-error 'bitmap flymake-error-bitmap)
+(put 'flymake-error 'severity (warning-numeric-level :error))
+
+(put 'flymake-warning 'face 'flymake-warning)
+(put 'flymake-warning 'bitmap flymake-warning-bitmap)
+(put 'flymake-warning 'warning (warning-numeric-level :warning))
 
 (defun flymake--type-alist (diagnostic-type)
   (assoc-default diagnostic-type
@@ -243,47 +277,51 @@ verify FILTER, sort them by COMPARE (using KEY)."
   (or (assoc-default
        'severity
        (flymake--type-alist (flymake--diag-type diagnostic)))
-      (warning-numeric-level :warning)))
+      ))
 
-(defun flymake--face (diagnostic)
-  (assoc-default
-   'face
-   (flymake--type-alist (flymake--diag-type diagnostic))))
-
-(defun flymake--fringe-overlay-spec (diagnostic)
-  (let ((bitmap
-         (assoc-default
-          'bitmap
-          (flymake--type-alist (flymake--diag-type diagnostic)))))
-    (and bitmap
-         flymake-fringe-indicator-position
-         (propertize "!" 'display
-                     (cons flymake-fringe-indicator-position
-                           (if (listp bitmap)
-                               bitmap
-                             (list bitmap)))))))
+(defun flymake--fringe-overlay-spec (bitmap)
+  (and flymake-fringe-indicator-position
+       bitmap
+       (propertize "!" 'display
+                   (cons flymake-fringe-indicator-position
+                         (if (listp bitmap)
+                             bitmap
+                           (list bitmap))))))
 
 (defun flymake--highlight-line (diagnostic)
   "Highlight buffer with info in DIAGNOSTIC."
-  (pcase-let* ((`(,beg . ,end) (flymake--diag-region diagnostic))
-               (severity (flymake--severity diagnostic))
-               (face (flymake--face diagnostic)))
-    (let ((ov (make-overlay beg end)))
-      (overlay-put ov 'before-string
-                   (flymake--fringe-overlay-spec diagnostic))
-      (overlay-put ov 'face face)
-      (overlay-put ov 'help-echo
-                   (lambda (_window _ov pos)
-                     (mapconcat
-                      (lambda (ov)
-                        (let ((diag (overlay-get ov 'flymake--diagnostic)))
-                          (flymake--diag-text diag)))
-                      (flymake--overlays :beg pos)
-                      "\n")))
-      (overlay-put ov 'priority (+ 100 severity))
-      (overlay-put ov 'evaporate t)
-      (overlay-put ov 'flymake-overlay t)
-      (overlay-put ov 'flymake--diagnostic diagnostic))))
+  (when-let* ((region (flymake--diag-region diagnostic))
+              (ov (make-overlay (car region) (cdr region))))
+    ;; First copy over to ov every property in the relevant alist.
+    ;;
+    (cl-loop for (k . v) in
+             (flymake--type-alist (flymake--diag-type diagnostic))
+             do (overlay-put ov k v))
+    ;; Now ensure some defaults are set
+    ;;
+    (cl-flet ((default-maybe
+                (prop value)
+                (unless (overlay-get ov prop)
+                  (overlay-put ov prop value))))
+      (default-maybe 'bitmap flymake-error-bitmap)
+      (default-maybe 'before-string
+        (flymake--fringe-overlay-spec
+         (overlay-get ov 'bitmap)))
+      (default-maybe 'help-echo
+        (lambda (_window _ov pos)
+          (mapconcat
+           (lambda (ov)
+             (let ((diag (overlay-get ov 'flymake--diagnostic)))
+               (flymake--diag-text diag)))
+           (flymake--overlays :beg pos)
+           "\n")))
+      (default-maybe 'severity (warning-numeric-level :error))
+      (default-maybe 'priority (+ 100 (overlay-get ov 'severity))))
+    ;; Some properties can't be overriden
+    ;;
+    (overlay-put ov 'evaporate t)
+    (overlay-put ov 'flymake-overlay t)
+    (overlay-put ov 'flymake--diagnostic diagnostic)))
 
 
 (defvar-local flymake-is-running nil
