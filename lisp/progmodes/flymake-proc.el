@@ -396,7 +396,7 @@ Create parent directories as needed."
   (flymake-log 3 "saved buffer %s in file %s" (buffer-name) file-name))
 
 (defun flymake-proc--diagnostics-for-pattern (proc pattern)
-  (condition-case err
+  (condition-case-unless-debug err
       (pcase-let ((`(,regexp ,file-idx ,line-idx ,col-idx ,message-idx)
                    pattern)
                   (retval))
@@ -485,7 +485,7 @@ Create parent directories as needed."
       (flymake-log 2 "process %d exited with code %d"
                    (process-id process) exit-status)
       (kill-buffer (process-get process 'flymake-proc--output-buffer))
-      (condition-case err
+      (condition-case-unless-debug err
           (progn
             (flymake-log 3 "cleaning up using %s" cleanup-f)
             (when (buffer-live-p source-buffer)
@@ -646,7 +646,7 @@ Instead of a function, it can also be a regular expression.")
     (flymake-log 1 "deleted file %s" file-name)))
 
 (defun flymake-proc--safe-delete-directory (dir-name)
-  (condition-case nil
+  (condition-case-unless-debug nil
       (progn
 	(delete-directory dir-name)
 	(flymake-log 1 "deleted dir %s" dir-name))
@@ -682,7 +682,7 @@ Instead of a function, it can also be a regular expression.")
 
 (defun flymake-proc--start-syntax-check-process (cmd args dir)
   "Start syntax check process."
-  (condition-case err
+  (condition-case-unless-debug err
       (let* ((process
               (let ((default-directory (or dir default-directory)))
                 (when dir
