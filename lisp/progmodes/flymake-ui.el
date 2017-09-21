@@ -194,6 +194,15 @@ verify FILTER, sort them by COMPARE (using KEY)."
   :version "24.4"
   :group 'flymake)
 
+(defface flymake-note
+  '((((supports :underline (:style wave)))
+     :underline (:style wave :color "yellow green"))
+    (t
+     :inherit warning))
+  "Face used for marking note regions."
+  :version "26.1"
+  :group 'flymake)
+
 (define-obsolete-face-alias 'flymake-warnline 'flymake-warning "26.1")
 (define-obsolete-face-alias 'flymake-errline 'flymake-error "26.1")
 
@@ -231,13 +240,14 @@ Or nil if the region is invalid."
            nil)))
 
 (defvar flymake-diagnostic-types-alist
-  `((("e" :error error)
+  `((:error
      . ((category . flymake-error)))
-    (("w" :warning warning)
-     . ((category . flymake-warning))))
-  "Alist (KEY PROPS) of properties of flymake error types.
-KEY can be anything passed as `:type' to `flymake-diag-make', or
-a list of such objects that all share PROPS.
+    (:warning
+     . ((category . flymake-warning)))
+    (:note
+     . ((category . flymake-note))))
+  "Alist ((KEY . PROPS)*) of properties of flymake error types.
+KEY can be anything passed as `:type' to `flymake-diag-make'.
 
 PROPS is an alist of properties that are applied, in order, to
 the overlays representing diagnostics. Every property pertaining
@@ -259,25 +269,26 @@ with flymake-specific meaning can also be used.
 
 (put 'flymake-warning 'face 'flymake-warning)
 (put 'flymake-warning 'bitmap flymake-warning-bitmap)
-(put 'flymake-warning 'warning (warning-numeric-level :warning))
+(put 'flymake-warning 'severity (warning-numeric-level :warning))
 
-(defun flymake--type-alist (diagnostic-type)
+(put 'flymake-note 'face 'flymake-note)
+(put 'flymake-note 'bitmap flymake-warning-bitmap)
+(put 'flymake-note 'severity (warning-numeric-level :debug))
+
+(defun flymake-type-alist (diagnostic-type)
+  "Look up DIAGNOSTIC-TYPE in `flymake-diagnostic-types-alist'."
   (assoc-default diagnostic-type
-                 flymake-diagnostic-types-alist
-                 (lambda (entry key)
-                   (or (equal key entry)
-                       (member key entry)))))
+                 flymake-diagnostic-types-alist))
 
 (defun flymake--diag-errorp (diag)
   "Tell if DIAG is a flymake error or something else"
-  (let ((sev (flymake--severity diag)))
-    (= sev (warning-numeric-level :error))))
-
-(defun flymake--severity (diagnostic)
-  (or (assoc-default
-       'severity
-       (flymake--type-alist (flymake--diag-type diagnostic)))
-      ))
+  ;; FIXME repeats some logic in ‘flymake--highlight-line’
+  (if-let* ((alist (flymake-type-alist (flymake--diag-type diag)))
+            (sev (or (assoc-default 'severity alist)
+                     (get (assoc-default 'category alist)
+                          'severity))))
+      (>= sev (warning-numeric-level :error))
+    t))
 
 (defun flymake--fringe-overlay-spec (bitmap)
   (and flymake-fringe-indicator-position
@@ -295,7 +306,7 @@ with flymake-specific meaning can also be used.
     ;; First copy over to ov every property in the relevant alist.
     ;;
     (cl-loop for (k . v) in
-             (flymake--type-alist (flymake--diag-type diagnostic))
+             (flymake-type-alist (flymake--diag-type diagnostic))
              do (overlay-put ov k v))
     ;; Now ensure some defaults are set
     ;;
