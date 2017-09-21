@@ -422,6 +422,14 @@ with flymake-specific meaning can also be used.
   (save-restriction
     (widen)
     (flymake-delete-own-overlays)
+    (setq diagnostics
+          (cl-remove-if-not
+           (lambda (diag)
+             (let ((ff (flymake--diag-full-file diag)))
+               (and ff
+                    (equal (expand-file-name ff)
+                           (expand-file-name (buffer-file-name))))))
+           diagnostics))
     (mapc #'flymake--fix-line-numbers diagnostics)
     (mapc #'flymake--highlight-line diagnostics)
     (let ((err-count (cl-count-if #'flymake--diag-errorp diagnostics))
