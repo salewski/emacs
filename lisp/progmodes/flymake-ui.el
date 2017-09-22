@@ -462,9 +462,16 @@ with flymake-specific meaning can also be used.
       (when (with-current-buffer buffer (funcall (car candidate)))
       (throw 'done (cdr candidate))))))
 
-(defun flymake--start-syntax-check ()
-  (setq flymake-check-start-time (float-time))
-  (funcall flymake--backend))
+(defun flymake--start-syntax-check (&optional deferred)
+  (cl-labels ((start
+               ()
+               (remove-hook 'post-command-hook #'start 'local)
+               (setq flymake-check-start-time (float-time))
+               (funcall flymake--backend)))
+    (if (and deferred
+             this-command)
+        (add-hook 'post-command-hook #'start 'append 'local)
+      (start))))
 
 ;;;###autoload
 (define-minor-mode flymake-mode nil
@@ -534,7 +541,7 @@ with flymake-specific meaning can also be used.
   (let((new-text (buffer-substring start stop)))
     (when (and flymake-start-syntax-check-on-newline (equal new-text "\n"))
       (flymake-log 3 "starting syntax check as new-line has been seen")
-      (flymake--start-syntax-check))
+      (flymake--start-syntax-check 'deferred))
     (setq flymake-last-change-time (float-time))))
 
 (defun flymake-after-save-hook ()
