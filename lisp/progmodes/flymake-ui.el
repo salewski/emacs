@@ -34,7 +34,7 @@
 
 (require 'cl-lib)
 (require 'thingatpt) ; end-of-thing
-(require 'warnings) ; warning-numeric-level
+(require 'warnings) ; warning-numeric-level, display-warning
 (eval-when-compile (require 'subr-x)) ; when-let*, if-let*
 
 (defgroup flymake nil
@@ -110,6 +110,9 @@ See `flymake-error-bitmap' and `flymake-warning-bitmap'."
 -1 = NONE, 0 = ERROR, 1 = WARNING, 2 = INFO, 3 = DEBUG"
   :group 'flymake
   :type 'integer)
+(make-obsolete-variable 'flymake-log-level
+			"it is superseded by `warning-minimum-log-level.'"
+                        "26.1")
 
 (defvar-local flymake-timer nil
   "Timer for starting syntax check.")
@@ -126,9 +129,24 @@ If LEVEL is higher than `flymake-log-level', the message is
 ignored.  Otherwise, it is printed using `message'.
 TEXT is a format control string, and the remaining arguments ARGS
 are the string substitutions (see the function `format')."
-  (if (<= level flymake-log-level)
-      (let* ((msg (apply #'format-message text args)))
-	(message "%s" msg))))
+  (let* ((msg (apply #'format-message text args))
+         (warning-minimum-level :emergency))
+    (display-warning
+     'flymake
+     (format "%s: %s" (buffer-name) msg)
+     (if (numberp level)
+         (or (nth level
+                  '(:error :warning :debug :debug) )
+             :error)
+       level)
+     "*Flymake log*")))
+
+(defun flymake-error (text &rest args)
+  "Signal an error for flymake."
+  (let ((msg (format-message text args)))
+    (flymake-log :error msg)
+    (error (concat "[flymake] "
+                   (format text args)))))
 
 (cl-defstruct (flymake--diag
                (:constructor flymake--diag-make))
@@ -147,7 +165,7 @@ description of the problem detected in this region."
 (defun flymake-ler-make-ler (file line type text &optional full-file)
   (let* ((file (or full-file file))
          (buf (find-buffer-visiting file)))
-    (unless buf (error "No buffer visiting %s" file))
+    (unless buf (flymake-error "No buffer visiting %s" file))
     (pcase-let* ((`(,beg . ,end)
                   (with-current-buffer buf
                     (flymake-diag-region line nil))))
@@ -241,8 +259,7 @@ Or nil if the region is invalid."
               (let* ((beg (fallback-bol))
                      (end (fallback-eol beg)))
                 (cons beg end))))))
-    (error (flymake-log 4 "Invalid region for diagnostic %s")
-           nil)))
+    (error (flymake-error "Invalid region line=%s col=%s" line col))))
 
 (defvar flymake-diagnostic-functions nil
   "List of flymake backends i.e. sources of flymake diagnostics.
@@ -471,7 +488,7 @@ A backend is disabled if it reported `:panic'.")
   "Handle reports from flymake backend identified by BACKEND."
   (cond
    ((not (memq backend flymake--running-backends))
-    (error "Ignoring unexpected report from backend %s" backend))
+    (flymake-error "Ignoring unexpected report from backend %s" backend))
    ((eq action :progress)
     (flymake-log 3 "Backend %s reports progress: %s" backend explanation))
    ((eq :panic action)
@@ -560,7 +577,7 @@ sources."
    (flymake-mode
     (cond
      ((not flymake-diagnostic-functions)
-      (error "flymake cannot check syntax in buffer %s" (buffer-name)))
+      (flymake-error "No backends to check buffer %s" (buffer-name)))
      (t
       (add-hook 'after-change-functions 'flymake-after-change-function nil t)
       (add-hook 'after-save-hook 'flymake-after-save-hook nil t)
@@ -591,13 +608,13 @@ sources."
 (defun flymake-mode-on ()
   "Turn flymake mode on."
   (flymake-mode 1)
-  (flymake-log 1 "flymake mode turned ON for buffer %s" (buffer-name)))
+  (flymake-log 1 "flymake mode turned ON"))
 
 ;;;###autoload
 (defun flymake-mode-off ()
   "Turn flymake mode off."
   (flymake-mode 0)
-  (flymake-log 1 "flymake mode turned OFF for buffer %s" (buffer-name)))
+  (flymake-log 1 "flymake mode turned OFF"))
 
 (defun flymake-after-change-function (start stop _len)
   "Start syntax check for current buffer if it isn't already running."
@@ -609,10 +626,9 @@ sources."
     (setq flymake-last-change-time (float-time))))
 
 (defun flymake-after-save-hook ()
-  (if (local-variable-p 'flymake-mode (current-buffer))	; (???) other way to determine whether flymake is active in buffer being saved?
-      (progn
-	(flymake-log 3 "starting syntax check as buffer was saved")
-	(flymake--start-syntax-check)))) ; no more mode 3. cannot start check if mode 3 (to temp copies) is active - (???)
+  (when flymake-mode
+    (flymake-log 3 "starting syntax check as buffer was saved")
+    (flymake--start-syntax-check))) ; no more mode 3. cannot start check if mode 3 (to temp copies) is active - (???)
 
 (defun flymake-kill-buffer-hook ()
   (when flymake-timer
@@ -624,7 +640,7 @@ sources."
   (unless (or flymake-mode
               (null flymake-diagnostic-functions))
     (flymake-mode)
-    (flymake-log 3 "automatically turned ON flymake mode")))
+    (flymake-log 3 "automatically turned ON")))
 
 (defun flymake-goto-next-error (&optional n interactive)
   "Go to next, or Nth next, flymake error in buffer."
