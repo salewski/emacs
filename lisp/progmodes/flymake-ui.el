@@ -585,7 +585,6 @@ non-nil."
         (add-hook 'post-command-hook #'start 'append 'local)
       (start))))
 
-;;;###autoload
 (define-minor-mode flymake-mode nil
   :group 'flymake :lighter flymake--mode-line-format
   (setq flymake--running-backends nil
@@ -621,13 +620,11 @@ non-nil."
       (cancel-timer flymake-timer)
       (setq flymake-timer nil)))))
 
-;;;###autoload
 (defun flymake-mode-on ()
   "Turn flymake mode on."
   (flymake-mode 1)
   (flymake-log 1 "flymake mode turned ON"))
 
-;;;###autoload
 (defun flymake-mode-off ()
   "Turn flymake mode off."
   (flymake-mode 0)
@@ -652,7 +649,6 @@ non-nil."
     (cancel-timer flymake-timer)
     (setq flymake-timer nil)))
 
-;;;###autoload
 (defun flymake-find-file-hook ()
   (unless (or flymake-mode
               (null flymake-diagnostic-functions))

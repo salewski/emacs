@@ -34,8 +34,21 @@
 
 ;;; Code:
 
+;;; Dummy autoloads ensure that this file gets autoloaded, not just
+;;; flymake-ui.el where they actually live.
+
+;;;###autoload
+(defun flymake-mode-on () "Turn flymake mode on." nil)
+
+;;;###autoload
+(defun flymake-mode-off () "Turn flymake mode off." nil)
+
+;;;###autoload
+(define-minor-mode flymake-mode nil)
+
 (require 'flymake-ui)
 (require 'flymake-proc)
+(require 'flymake-elisp)
 
 (provide 'flymake)
 ;;; flymake.el ends here
