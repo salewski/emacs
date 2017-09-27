@@ -346,20 +346,32 @@ with flymake-specific meaning can also be used.
 (put 'flymake-note 'bitmap flymake-warning-bitmap)
 (put 'flymake-note 'severity (warning-numeric-level :debug))
 
-(defun flymake-type-alist (diagnostic-type)
-  "Look up DIAGNOSTIC-TYPE in `flymake-diagnostic-types-alist'."
-  (assoc-default diagnostic-type
-                 flymake-diagnostic-types-alist))
+(defun flymake--lookup-type-property (type prop &optional default)
+  "Look up PROP for TYPE in `flymake-diagnostic-types-alist'.
+If TYPE doesn't declare PROP in either
+`flymake-diagnostic-types-alist' or its associated category,
+return DEFAULT."
+  (let ((alist-probe (assoc type flymake-diagnostic-types-alist)))
+    (cond (alist-probe
+           (let* ((alist (cdr alist-probe))
+                  (prop-probe (assoc prop alist)))
+             (if prop-probe
+                 (cdr prop-probe)
+               (if-let* ((cat (assoc-default 'category alist))
+                         (plist (and (symbolp cat)
+                                     (symbol-plist cat)))
+                         (cat-probe (plist-member plist prop)))
+                   (cadr cat-probe)
+                 default))))
+          (t
+           default))))
 
 (defun flymake--diag-errorp (diag)
   "Tell if DIAG is a flymake error or something else"
-  ;; FIXME repeats some logic in ‘flymake--highlight-line’
-  (if-let* ((alist (flymake-type-alist (flymake--diag-type diag)))
-            (sev (or (assoc-default 'severity alist)
-                     (get (assoc-default 'category alist)
-                          'severity))))
-      (>= sev (warning-numeric-level :error))
-    t))
+  (let ((sev (flymake--lookup-type-property 'severity
+                                            (flymake--diag-type diag)
+                                            (warning-numeric-level :error))))
+    (>= sev (warning-numeric-level :error))))
 
 (defun flymake--fringe-overlay-spec (bitmap)
   (and flymake-fringe-indicator-position
@@ -378,7 +390,8 @@ with flymake-specific meaning can also be used.
     ;; First copy over to ov every property in the relevant alist.
     ;;
     (cl-loop for (k . v) in
-             (flymake-type-alist (flymake--diag-type diagnostic))
+             (assoc-default (flymake--diag-type diagnostic)
+                            flymake-diagnostic-types-alist)
              do (overlay-put ov k v))
     ;; Now ensure some defaults are set
     ;;
@@ -523,7 +536,7 @@ A backend is disabled if it reported `:panic'.")
                               (format "unknown action %s (%s)"
                                       action explanation))))
   (unless (eq action :progress)
-    (setq flymake--running-backends (delq backend flymake--running-backends))))
+    (flymake--stop-backend backend)))
 
 (defun flymake-make-report-fn (backend)
   "Make a suitable anonymous report function for BACKEND.
@@ -532,36 +545,43 @@ sources."
   (lambda (&rest args)
     (apply #'flymake--handle-report backend args)))
 
+(defun flymake--stop-backend (backend)
+  "Stop the backend BACKEND."
+  (setq flymake--running-backends (delq backend flymake--running-backends)))
+
+(defun flymake--run-backend (backend)
+  "Run the backend BACKEND."
+  (push backend flymake--running-backends)
+  ;; FIXME: Should use `condition-case-unless-debug'
+  ;; here, but that won't let me catch errors during
+  ;; testing where `debug-on-error' is always t
+  (condition-case err
+      (unless (funcall backend
+                       (flymake-make-report-fn backend))
+        (flymake--stop-backend backend))
+    (error
+     (flymake--disable-backend backend :error
+                               err)
+     (flymake--stop-backend backend))))
+
 (defun flymake--start-syntax-check (&optional deferred)
+  "Start a syntax check.
+Start it immediately, or after current command if DEFERRED is
+non-nil."
   (cl-labels
-      ((remove
-        (backend)
-        (setq flymake--running-backends
-              (delq backend flymake--running-backends)))
-       (start
+      ((start
         ()
         (remove-hook 'post-command-hook #'start 'local)
         (setq flymake-check-start-time (float-time))
         (dolist (backend flymake-diagnostic-functions)
           (cond ((memq backend flymake--running-backends)
-                 (flymake-log 1 "Backend %s still running, not restarting"
+                 (flymake-log 2 "Backend %s still running, not restarting"
                               backend))
                 ((memq backend flymake--disabled-backends)
-                 (flymake-log 1 "Backend %s is disabled, not starting"
+                 (flymake-log 2 "Backend %s is disabled, not starting"
                               backend))
                 (t
-                 (push backend flymake--running-backends)
-                 ;; FIXME: Should use `condition-case-unless-debug'
-                 ;; here, but that won't let me catch errors during
-                 ;; testing where `debug-on-error' is always t
-                 (condition-case err
-                     (unless (funcall backend
-                                      (flymake-make-report-fn backend))
-                       (remove backend))
-                   (error
-                    (flymake--disable-backend backend :error
-                                              err)
-                    (remove backend))))))))
+                 (flymake--run-backend backend))))))
     (if (and deferred
              this-command)
         (add-hook 'post-command-hook #'start 'append 'local)

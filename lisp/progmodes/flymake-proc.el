@@ -409,7 +409,8 @@ Create parent directories as needed."
                       :error))
                    ((functionp pred)
                     (let ((probe (funcall pred message)))
-                      (cond ((flymake-type-alist probe)
+                      (cond ((assoc-default probe
+                                            flymake-diagnostic-types-alist)
                              probe)
                             (probe
                              :warning)
