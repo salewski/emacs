@@ -115,6 +115,10 @@ See `flymake-error-bitmap' and `flymake-warning-bitmap'."
 			"it is superseded by `warning-minimum-log-level.'"
                         "26.1")
 
+(defcustom flymake-wrap-around t
+  "If non-nil, moving to errors wraps around buffer boundaries."
+  :group 'flymake :type 'boolean)
+
 (defvar-local flymake-timer nil
   "Timer for starting syntax check.")
 
@@ -693,13 +697,21 @@ diagnostics of type `:error' and `:warning'."
                                                     filter)))))
                                  :compare (if (cl-plusp n) #'< #'>)
                                  :key #'overlay-start))
-         (chain (cl-member-if (lambda (ov)
-                                (if (cl-plusp n)
-                                    (> (overlay-start ov)
-                                       (point))
-                                  (< (overlay-start ov)
-                                     (point))))
-                              ovs))
+         (tail (cl-member-if (lambda (ov)
+                               (if (cl-plusp n)
+                                   (> (overlay-start ov)
+                                      (point))
+                                 (< (overlay-start ov)
+                                    (point))))
+                             ovs))
+         (chain (if flymake-wrap-around
+                    (if tail
+                        (progn
+                          (setcdr (last tail) ovs)
+                          tail)
+                      (setcdr (last ovs) ovs)
+                      ovs)
+                  tail))
          (target (nth (1- n) chain)))
     (cond (target
            (goto-char (overlay-start target))
