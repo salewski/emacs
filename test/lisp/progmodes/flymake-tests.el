@@ -128,7 +128,7 @@ SEVERITY-PREDICATE is used to setup
     (should (eq 'flymake-warning (face-at-point)))
     (flymake-goto-next-error)
     (should (eq 'flymake-error (face-at-point)))
-    (should-error (flymake-goto-next-error nil t)) ))
+    (should-error (flymake-goto-next-error nil nil t)) ))
 
 (defmacro flymake-tests--assert-set (set
                                      should
@@ -243,7 +243,7 @@ SEVERITY-PREDICATE is used to setup
         (should (eq 'flymake-warning (face-at-point))) ; dolor
         (flymake-goto-next-error)
         (should (eq 'flymake-error (face-at-point))) ; prognata
-        (should-error (flymake-goto-next-error nil t))))))
+        (should-error (flymake-goto-next-error nil nil t))))))
 
 (provide 'flymake-tests)
 

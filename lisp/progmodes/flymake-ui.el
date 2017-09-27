@@ -642,11 +642,30 @@ sources."
     (flymake-mode)
     (flymake-log 3 "automatically turned ON")))
 
-(defun flymake-goto-next-error (&optional n interactive)
-  "Go to next, or Nth next, flymake error in buffer."
-  (interactive (list 1 t))
+(defun flymake-goto-next-error (&optional n filter interactive)
+  "Go to Nth next flymake error in buffer matching FILTER.
+FILTER is a list of diagnostic types found in
+`flymake-diagnostic-types-alist', or nil, if no filter is to be
+applied.
+
+Interactively, always goes to the next error.  Also
+interactively, FILTER is determined by the prefix arg.  With no
+prefix arg, don't use a filter, otherwise only consider
+diagnostics of type `:error' and `:warning'."
+  (interactive (list 1
+                     (if current-prefix-arg
+                         '(:error :warning))
+                     t))
   (let* ((n (or n 1))
-         (ovs (flymake--overlays :filter 'flymake--diagnostic
+         (ovs (flymake--overlays :filter
+                                 (lambda (ov)
+                                   (let ((diag (overlay-get
+                                                ov
+                                                'flymake--diagnostic)))
+                                     (and diag
+                                          (or (not filter)
+                                              (memq (flymake--diag-type diag)
+                                                    filter)))))
                                  :compare (if (cl-plusp n) #'< #'>)
                                  :key #'overlay-start))
          (chain (cl-member-if (lambda (ov)
@@ -664,12 +683,26 @@ sources."
               (funcall (overlay-get target 'help-echo)
                        nil nil (point)))))
           (interactive
-           (user-error "No more flymake errors")))))
+           (user-error "No more flymake errors%s"
+                       (if filter
+                           (format " of types %s" filter)
+                         ""))))))
 
-(defun flymake-goto-prev-error (&optional n interactive)
-  "Go to previous, or Nth previous, flymake error in buffer."
-  (interactive (list 1 t))
-  (flymake-goto-next-error (- (or n 1)) interactive))
+(defun flymake-goto-prev-error (&optional n filter interactive)
+  "Go to Nth previous flymake error in buffer matching FILTER.
+FILTER is a list of diagnostic types found in
+`flymake-diagnostic-types-alist', or nil, if no filter is to be
+applied.
+
+Interactively, always goes to the previous error.  Also
+interactively, FILTER is determined by the prefix arg.  With no
+prefix arg, don't use a filter, otherwise only consider
+diagnostics of type `:error' and `:warning'."
+  (interactive (list 1 (if current-prefix-arg
+                           '(:error :warning))
+                     t))
+  (flymake-goto-next-error (- (or n 1)) filter interactive))
+
 
 (provide 'flymake-ui)
 ;;; flymake-ui.el ends here
