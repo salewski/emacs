@@ -379,13 +379,6 @@ return DEFAULT."
           (t
            default))))
 
-(defun flymake--diag-errorp (diag)
-  "Tell if DIAG is a flymake error or something else"
-  (let ((sev (flymake--lookup-type-property 'severity
-                                            (flymake--diag-type diag)
-                                            (warning-numeric-level :error))))
-    (>= sev (warning-numeric-level :error))))
-
 (defun flymake--fringe-overlay-spec (bitmap)
   (and flymake-fringe-indicator-position
        bitmap
@@ -469,10 +462,9 @@ return DEFAULT."
                   (list 'mouse-1 (posn-at-point))))
          (diagnostics (mapcar (lambda (ov) (overlay-get ov 'flymake--diagnostic))
                               diag-overlays))
-         (title (format "Line %d: %d error(s), %d other(s)"
+         (title (format "Line %d: %d diagnostics(s)"
                         (line-number-at-pos)
-                        (cl-count-if #'flymake--diag-errorp diagnostics)
-                        (cl-count-if-not #'flymake--diag-errorp diagnostics)))
+                        (length diagnostics)))
          (choice (x-popup-menu event (list title (cons "" menu)))))
     (flymake-log 3 "choice=%s" choice)
     ;; FIXME: What is the point of going to the problem locus if we're
@@ -534,13 +526,11 @@ FORCE says to handle a report even if it was not expected."
                 (flymake--highlight-line diag)
                 (setf (flymake--diag-backend diag) backend))
               diagnostics)
-        (let ((err-count (cl-count-if #'flymake--diag-errorp diagnostics))
-              (warn-count (cl-count-if-not #'flymake--diag-errorp
-                                           diagnostics)))
-          (when flymake-check-start-time
-            (flymake-log 2 "%d error(s), %d other(s) in %.2f second(s)"
-                         err-count warn-count
-                         (- (float-time) flymake-check-start-time)))))))
+        (when flymake-check-start-time
+          (flymake-log 2 "backend %s reported %d diagnostics in %.2f second(s)"
+                       backend
+                       (length diagnostics)
+                       (- (float-time) flymake-check-start-time))))))
    (t
     (flymake--disable-backend "?"
                               :strange
