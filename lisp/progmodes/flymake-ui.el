@@ -711,11 +711,8 @@ diagnostics of type `:error' and `:warning'."
                              ovs))
          (chain (if flymake-wrap-around
                     (if tail
-                        (progn
-                          (setcdr (last tail) ovs)
-                          tail)
-                      (setcdr (last ovs) ovs)
-                      ovs)
+                        (progn (setcdr (last tail) ovs) tail)
+                      (and ovs (setcdr (last ovs) ovs)))
                   tail))
          (target (nth (1- n) chain)))
     (cond (target
