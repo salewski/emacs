@@ -441,38 +441,6 @@ return DEFAULT."
 	(flymake-log 3 "starting syntax check as more than 1 second passed since last change")
 	(flymake-start)))))
 
-(define-obsolete-function-alias 'flymake-display-err-menu-for-current-line
-  'flymake-popup-current-error-menu "24.4")
-
-(defun flymake-popup-current-error-menu (&optional event)
-  "Pop up a menu with errors/warnings for current line."
-  (interactive (list last-nonmenu-event))
-  (let* ((diag-overlays (or
-                         (flymake--overlays :filter 'flymake--diagnostic
-                                            :beg (line-beginning-position)
-                                            :end (line-end-position))
-                         (user-error "No flymake problem for current line")))
-         (menu (mapcar (lambda (ov)
-                         (let ((diag (overlay-get ov 'flymake--diagnostic)))
-                           (cons (flymake--diag-text diag)
-                                 ov)))
-                       diag-overlays))
-         (event (if (mouse-event-p event)
-                    event
-                  (list 'mouse-1 (posn-at-point))))
-         (diagnostics (mapcar (lambda (ov) (overlay-get ov 'flymake--diagnostic))
-                              diag-overlays))
-         (title (format "Line %d: %d diagnostics(s)"
-                        (line-number-at-pos)
-                        (length diagnostics)))
-         (choice (x-popup-menu event (list title (cons "" menu)))))
-    (flymake-log 3 "choice=%s" choice)
-    ;; FIXME: What is the point of going to the problem locus if we're
-    ;; certainly already there?
-    ;;
-    (when choice (goto-char (overlay-start choice)))))
-
-
 ;; Nothing in flymake uses this at all any more, so this is just for
 ;; third-party compatibility.
 (define-obsolete-function-alias 'flymake-display-warning 'message-box "26.1")
