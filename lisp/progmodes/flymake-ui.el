@@ -148,10 +148,9 @@ are the string substitutions (see the function `format')."
 
 (defun flymake-error (text &rest args)
   "Signal an error for flymake."
-  (let ((msg (format-message text args)))
+  (let ((msg (apply #'format-message text args)))
     (flymake-log :error msg)
-    (error (concat "[flymake] "
-                   (format text args)))))
+    (error (concat "[flymake] " msg))))
 
 (cl-defstruct (flymake--diag
                (:constructor flymake--diag-make))
@@ -235,9 +234,10 @@ verify FILTER, sort them by COMPARE (using KEY)."
 (define-obsolete-face-alias 'flymake-warnline 'flymake-warning "26.1")
 (define-obsolete-face-alias 'flymake-errline 'flymake-error "26.1")
 
-(defun flymake-diag-region (line col)
+(defun flymake-diag-region (line &optional col)
   "Compute region (BEG . END) corresponding to LINE and COL.
-Or nil if the region is invalid."
+If COL is nil, return a region just for LINE.
+Return nil if the region is invalid."
   (condition-case-unless-debug _err
       (let ((line (min (max line 1)
                        (line-number-at-pos (point-max) 'absolute))))
@@ -254,13 +254,18 @@ Or nil if the region is invalid."
                        (if (eq (point) beg)
                            (line-beginning-position 2)
                          (point)))))
-            (if col
-                (let* ((beg (progn (forward-char (1- col)) (point)))
+            (if (and col (cl-plusp col))
+                (let* ((beg (progn (forward-char (1- col))
+                                   (point)))
                        (sexp-end (ignore-errors (end-of-thing 'sexp)))
-                       (end (or sexp-end
-                                (fallback-eol beg))))
-                  (cons (if sexp-end beg (fallback-bol))
-                        end))
+                       (end (or (and sexp-end
+                                     (not (= sexp-end beg))
+                                     sexp-end)
+                                (ignore-errors (goto-char (1+ beg)))))
+                       (safe-end (or end
+                                     (fallback-eol beg))))
+                  (cons (if end beg (fallback-bol))
+                        safe-end))
               (let* ((beg (fallback-bol))
                      (end (fallback-eol beg)))
                 (cons beg end))))))
