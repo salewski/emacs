@@ -3235,7 +3235,7 @@ the end")} (only reversed, since we used @code{push}).
 
 This will pick out all the regions where @code{face} is set to
 something, but this is split up into where the properties change, so
-the result here will be @samp{"bold" "bold" "italic"}.
+the result here will be @samp{("bold" "bold" "italic")}.
 
 For a more realistic example where you might use this, consider that
 you have a buffer where certain sections represent URLs, and these are
