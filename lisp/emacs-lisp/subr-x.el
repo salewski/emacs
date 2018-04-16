@@ -260,7 +260,7 @@ TRIM-LEFT and TRIM-RIGHT default to \"[ \\t\\n\\r]+\"."
   "Search for the next region that has text property PROPERTY set to VALUE.
 If not found, the return value is nil.  If found, point will be
 placed at the end of the region and an object describing the
-beginning, and the value of the property is returned.
+match is returned.
 
 PREDICATE is called with two values.  The first is the VALUE
 parameter.  The second is the value of PROPERTY.  This predicate
@@ -269,7 +269,13 @@ should return non-nil if there is a match.
 Some convenience values for PREDICATE can also be used.  `t'
 means the same as `equal'.  `nil' means almost the same as \"not
 equal\", but will also end the match if the value of PROPERTY
-changes.  See the manual for extensive examples."
+changes.  See the manual for extensive examples.
+
+The return value (if a match is made) is a `prop-match'
+structure.  The accessor avaliable are
+`prop-match-beginning'/`prop-match-end' (which are the region in
+the buffer that's matching, and `prop-match-value', which is the
+value of PROPERTY at the start of the region."
   ;; We're standing in the property we're looking for, so find the
   ;; end.
   (if (text-property--match-p value (get-text-property (point) property)
