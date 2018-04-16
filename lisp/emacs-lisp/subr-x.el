@@ -285,18 +285,42 @@ value of PROPERTY at the start of the region."
     (let ((string (completing-read "Search for property: " obarray)))
       (when (> (length string) 0)
         (intern string obarray)))))
+  (text-property--search #'next-single-property-change #'point-max
+                         property value predicate not-immediate))
+
+(defun text-property-search-backward (property &optional value predicate
+                                               not-immediate)
+  "Search for the next region that has text property PROPERTY set to VALUE.
+See `text-property-search-forward' for further documentation."
+  (interactive
+   (list
+    (let ((string (completing-read "Search for property: " obarray)))
+      (when (> (length string) 0)
+        (intern string obarray)))))
+  (text-property--search #'text-property--previous-change #'point-min
+                         property value predicate not-immediate))
+
+(defun text-property--previous-change (position prop &optional object limit)
+  (let ((pos (previous-single-property-change position prop
+                                              object limit)))
+    (and pos
+         (max (1- pos) (point-min)))))
+
+(defun text-property--search (next-func extreme-func
+                                        property value predicate not-immediate)
   ;; We're standing in the property we're looking for, so find the
   ;; end.
   (if (and (text-property--match-p value (get-text-property (point) property)
                                    predicate)
            (not not-immediate))
-      (text-property--find-end (point) property value predicate)
+      (text-property--find-end (point) property value predicate
+                               next-func extreme-func)
     (let ((origin (point))
           (ended nil)
           pos)
       ;; Fix the next candidate.
       (while (not ended)
-        (setq pos (next-single-property-change (point) property))
+        (setq pos (funcall next-func (point) property))
         (if (not pos)
             (progn
               (goto-char origin)
@@ -305,16 +329,18 @@ value of PROPERTY at the start of the region."
           (if (text-property--match-p value (get-text-property (point) property)
                                       predicate)
               (setq ended
-                    (text-property--find-end (point) property value predicate))
+                    (text-property--find-end (point) property value predicate
+                                             next-func extreme-func))
             ;; Skip past this section of non-matches.
-            (setq pos (next-single-property-change (point) property))
+            (setq pos (funcall next-func (point) property))
             (unless pos
               (goto-char origin)
               (setq ended t)))))
       (and (not (eq ended t))
            ended))))
 
-(defun text-property--find-end (start property value predicate)
+(defun text-property--find-end (start property value predicate
+                                      next-func extreme-func)
   (let (end)
     (if (and value
              (null predicate))
@@ -323,10 +349,10 @@ value of PROPERTY at the start of the region."
         ;; property has different values, all non-matching value.
         (let ((ended nil))
           (while (not ended)
-            (setq end (next-single-property-change (point) property))
+            (setq end (funcall next-func (point) property))
             (if (not end)
                 (progn
-                  (goto-char (point-max))
+                  (goto-char (funcall extreme-func))
                   (setq end (point)
                         ended t))
               (goto-char end)
@@ -334,8 +360,8 @@ value of PROPERTY at the start of the region."
                        value (get-text-property (point) property) predicate)
                 (setq ended t)))))
       ;; End this at the first place the property changes value.
-      (setq end (next-single-property-change
-                 (point) property nil (point-max)))
+      (setq end (funcall next-func (point) property nil
+                         (funcall extreme-func)))
       (goto-char end))
     (make-prop-match :beginning start
                      :end end
