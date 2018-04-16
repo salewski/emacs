@@ -253,6 +253,73 @@ TRIM-LEFT and TRIM-RIGHT default to \"[ \\t\\n\\r]+\"."
       (substring string 0 (- (length string) (length suffix)))
     string))
 
+(cl-defstruct (prop-match)
+  beginning end value)
+
+(defun text-property-search-forward (property value predicate)
+  "Search for the next region that has text property PROPERTY set to VALUE.
+If not found, the return value is nil.  If found, point will be
+placed at the end of the region and an object describing the
+beginning, and the value of the property is returned.
+
+PREDICATE is called with two values.  The first is the VALUE
+parameter.  The second is the value of PROPERTY.  This predicate
+should return non-nil if there is a match.
+
+Some convenience values for PREDICATE can also be used.  `t'
+means the same as `equal'.  `nil' means almost the same as \"not
+equal\", but will also end the match if the value of PROPERTY
+changes.  See the manual for extensive examples."
+  ;; We're standing in the property we're looking for, so find the
+  ;; end.
+  (if (text-property--match-p value (get-text-property (point) property)
+                              predicate)
+      (let ((start (point))
+            (end (next-single-property-change
+                  (point) property nil (point-max))))
+        (goto-char end)
+        (make-prop-match :beginning start
+                         :end end
+                         :value (get-text-property start property)))
+    (let ((origin (point))
+          (ended nil)
+          pos)
+      ;; Fix the next candidate.
+      (while (not ended)
+        (setq pos (next-single-property-change (point) property))
+        (if (not pos)
+            (progn
+              (goto-char origin)
+              (setq ended t))
+          (goto-char pos)
+          (if (text-property--match-p value (get-text-property (point) property)
+                                      predicate)
+              (let ((start (point))
+                    (end (next-single-property-change
+                          (point) property nil (point-max))))
+                (goto-char end)
+                (setq ended
+                      (make-prop-match
+                       :beginning start
+                       :end end
+                       :value (get-text-property start property))))
+            ;; Skip past this section of non-matches.
+            (setq pos (next-single-property-change (point) property))
+            (unless pos
+              (goto-char origin)
+              (setq ended t)))))
+      (and (not (eq ended t))
+           ended))))
+
+(defun text-property--match-p (value prop-value predicate)
+  (cond
+   ((eq predicate t)
+    (setq predicate #'equal))
+   ((eq predicate nil)
+    (setq predicate (lambda (val p-val)
+                      (not (equal val p-val))))))
+  (funcall predicate value prop-value))
+
 (provide 'subr-x)
 
 ;;; subr-x.el ends here
