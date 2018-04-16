@@ -256,7 +256,7 @@ TRIM-LEFT and TRIM-RIGHT default to \"[ \\t\\n\\r]+\"."
 (cl-defstruct (prop-match)
   beginning end value)
 
-(defun text-property-search-forward (property value predicate)
+(defun text-property-search-forward (property &optional value predicate)
   "Search for the next region that has text property PROPERTY set to VALUE.
 If not found, the return value is nil.  If found, point will be
 placed at the end of the region and an object describing the

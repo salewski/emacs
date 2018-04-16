@@ -3180,7 +3180,7 @@ buffer to scan.  Positions are relative to @var{object}.  The default
 for @var{object} is the current buffer.
 @end defun
 
-@defun text-property-search-forward prop value predicate
+@defun text-property-search-forward prop &optional value predicate
 Search for the next region that has text property @var{prop} set to
 @var{value} according to @var{predicate}.
 
