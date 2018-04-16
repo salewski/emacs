@@ -276,6 +276,11 @@ structure.  The accessor avaliable are
 `prop-match-beginning'/`prop-match-end' (which are the region in
 the buffer that's matching, and `prop-match-value', which is the
 value of PROPERTY at the start of the region."
+  (interactive
+   (list
+    (let ((string (completing-read "Search for property: " obarray)))
+      (when (> (length string) 0)
+        (intern string obarray)))))
   ;; We're standing in the property we're looking for, so find the
   ;; end.
   (if (text-property--match-p value (get-text-property (point) property)
