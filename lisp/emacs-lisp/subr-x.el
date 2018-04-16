@@ -274,13 +274,7 @@ changes.  See the manual for extensive examples."
   ;; end.
   (if (text-property--match-p value (get-text-property (point) property)
                               predicate)
-      (let ((start (point))
-            (end (next-single-property-change
-                  (point) property nil (point-max))))
-        (goto-char end)
-        (make-prop-match :beginning start
-                         :end end
-                         :value (get-text-property start property)))
+      (text-property--find-end (point) property value predicate)
     (let ((origin (point))
           (ended nil)
           pos)
@@ -294,15 +288,8 @@ changes.  See the manual for extensive examples."
           (goto-char pos)
           (if (text-property--match-p value (get-text-property (point) property)
                                       predicate)
-              (let ((start (point))
-                    (end (next-single-property-change
-                          (point) property nil (point-max))))
-                (goto-char end)
-                (setq ended
-                      (make-prop-match
-                       :beginning start
-                       :end end
-                       :value (get-text-property start property))))
+              (setq ended
+                    (text-property--find-end (point) property value predicate))
             ;; Skip past this section of non-matches.
             (setq pos (next-single-property-change (point) property))
             (unless pos
@@ -310,6 +297,33 @@ changes.  See the manual for extensive examples."
               (setq ended t)))))
       (and (not (eq ended t))
            ended))))
+
+(defun text-property--find-end (start property value predicate)
+  (let (end)
+    (if (and value
+             (null predicate))
+        ;; This is the normal case: We're looking for areas where the
+        ;; values aren't, so we aren't interested in sub-areas where the
+        ;; property has different values, all non-matching value.
+        (let ((ended nil))
+          (while (not ended)
+            (setq end (next-single-property-change (point) property))
+            (if (not end)
+                (progn
+                  (goto-char (point-max))
+                  (setq end (point)
+                        ended t))
+              (goto-char end)
+              (unless (text-property--match-p
+                       value (get-text-property (point) property) predicate)
+                (setq ended t)))))
+      ;; End this at the first place the property changes value.
+      (setq end (next-single-property-change
+                 (point) property nil (point-max)))
+      (goto-char end))
+    (make-prop-match :beginning start
+                     :end end
+                     :value (get-text-property start property))))
 
 (defun text-property--match-p (value prop-value predicate)
   (cond
