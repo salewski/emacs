@@ -256,7 +256,8 @@ TRIM-LEFT and TRIM-RIGHT default to \"[ \\t\\n\\r]+\"."
 (cl-defstruct (prop-match)
   beginning end value)
 
-(defun text-property-search-forward (property &optional value predicate)
+(defun text-property-search-forward (property &optional value predicate
+                                              not-immediate)
   "Search for the next region that has text property PROPERTY set to VALUE.
 If not found, the return value is nil.  If found, point will be
 placed at the end of the region and an object describing the
@@ -271,6 +272,9 @@ means the same as `equal'.  `nil' means almost the same as \"not
 equal\", but will also end the match if the value of PROPERTY
 changes.  See the manual for extensive examples.
 
+If `not-immediate', if the match is under point, it will not be
+returned, but instead the next instance is returned, if any.
+
 The return value (if a match is made) is a `prop-match'
 structure.  The accessor avaliable are
 `prop-match-beginning'/`prop-match-end' (which are the region in
@@ -283,8 +287,9 @@ value of PROPERTY at the start of the region."
         (intern string obarray)))))
   ;; We're standing in the property we're looking for, so find the
   ;; end.
-  (if (text-property--match-p value (get-text-property (point) property)
-                              predicate)
+  (if (and (text-property--match-p value (get-text-property (point) property)
+                                   predicate)
+           (not not-immediate))
       (text-property--find-end (point) property value predicate)
     (let ((origin (point))
           (ended nil)
