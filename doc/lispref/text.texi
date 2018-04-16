@@ -3184,11 +3184,12 @@ for @var{object} is the current buffer.
 Search for the next region that has text property @var{prop} set to
 @var{value} according to @var{predicate}.
 
-This function is modelled after @code{search-forward} and friends, and
-moves points, but returns a structure that describes the match.
+This function is modelled after @code{search-forward} and friends in
+that it moves point, but it returns a structure that describes the
+match instead of returning it in @code{match-beginning} and friends.
 
-If we can't find the text property, the function returns @code{nil}.
-If we find it, point is placed at the end of the region that has this
+If the text property can't be found, the function returns @code{nil}.
+If it's found, point is placed at the end of the region that has this
 text property match, and a @code{prop-match} structure is returned.
 
 @var{predicate} can either be @code{t} (which is a synonym for
