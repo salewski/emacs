@@ -297,8 +297,16 @@ See `text-property-search-forward' for further documentation."
     (let ((string (completing-read "Search for property: " obarray)))
       (when (> (length string) 0)
         (intern string obarray)))))
-  (text-property--search #'text-property--previous-change #'point-min
-                         property value predicate not-immediate))
+  (let ((match
+         (text-property--search #'text-property--previous-change #'point-min
+                                property value predicate not-immediate)))
+    (when match
+      ;; We have to exchange beginning and end since everything's
+      ;; backwards when searching backwards.  Also adjust the end
+      ;; point to the correct place.
+      (cl-rotatef (prop-match-beginning match) (prop-match-end match))
+      (setf (prop-match-end match) (1+ (prop-match-end match))))
+    match))
 
 (defun text-property--previous-change (position prop &optional object limit)
   (let ((pos (previous-single-property-change position prop
