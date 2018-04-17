@@ -78,6 +78,7 @@ See `text-property-search-forward' for further documentation."
       ;; backwards when searching backwards.  Also adjust the end
       ;; point to the correct place.
       (cl-rotatef (prop-match-beginning match) (prop-match-end match))
+      (setf (prop-match-beginning match) (1+ (prop-match-beginning match)))
       (setf (prop-match-end match) (1+ (prop-match-end match))))
     match))
 
