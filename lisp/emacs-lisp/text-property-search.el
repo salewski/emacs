@@ -59,7 +59,8 @@ value of PROPERTY at the start of the region."
       (when (> (length string) 0)
         (intern string obarray)))))
   (text-property--search #'next-single-property-change #'point-max
-                         property value predicate not-immediate))
+                         property value predicate not-immediate
+                         (point)))
 
 (defun text-property-search-backward (property &optional value predicate
                                                not-immediate)
@@ -72,7 +73,8 @@ See `text-property-search-forward' for further documentation."
         (intern string obarray)))))
   (let ((match
          (text-property--search #'text-property--previous-change #'point-min
-                                property value predicate not-immediate)))
+                                property value predicate not-immediate
+                                (max (1- (point)) (point-min)))))
     (when match
       ;; We have to exchange beginning and end since everything's
       ;; backwards when searching backwards.  Also adjust the end
@@ -83,16 +85,16 @@ See `text-property-search-forward' for further documentation."
     match))
 
 (defun text-property--previous-change (position prop &optional object limit)
-  (let ((pos (previous-single-property-change position prop
-                                              object limit)))
-    (and pos
-         (max (1- pos) (point-min)))))
+  (when-let ((pos (previous-single-property-change position prop
+                                                   object limit)))
+    (max (1- pos) (point-min))))
 
 (defun text-property--search (next-func extreme-func
-                                        property value predicate not-immediate)
+                                        property value predicate not-immediate
+                                        start)
   ;; We're standing in the property we're looking for, so find the
   ;; end.
-  (if (and (text-property--match-p value (get-text-property (point) property)
+  (if (and (text-property--match-p value (get-text-property start property)
                                    predicate)
            (not not-immediate))
       (text-property--find-end (point) property value predicate
