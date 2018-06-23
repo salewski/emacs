@@ -924,7 +924,11 @@ load_pdump (int argc, char **argv)
 #endif /* HAVE_PDUMPER */
 
 int
+#ifdef HAVE_NS
+emacs_main (int argc, char **argv)
+#else
 main (int argc, char **argv)
+#endif
 {
   /* Variable near the bottom of the stack, and aligned appropriately
      for pointers.  */

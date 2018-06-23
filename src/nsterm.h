@@ -391,12 +391,8 @@ typedef id instancetype;
 - (void)sendEvent: (NSEvent *)theEvent;
 - (void)showPreferencesWindow: (id)sender;
 - (BOOL) openFile: (NSString *)fileName;
-- (void)fd_handler: (id)unused;
-- (void)timeout_handler: (NSTimer *)timedEntry;
 - (BOOL)fulfillService: (NSString *)name withArg: (NSString *)arg;
-#ifdef NS_IMPL_GNUSTEP
-- (void)sendFromMainThread:(id)unused;
-#endif
+- (void)initLispThread: (int)argc withArgv: (char **)argv;
 @end
 
 #ifdef NS_IMPL_GNUSTEP
@@ -758,6 +754,14 @@ typedef id instancetype;
 + (CGFloat)scrollerWidth;
 @end
 
+@interface EmacsThread: NSThread
+{
+}
+- (instancetype) initWithArgc: (int)argc Argv: (char **)argv;
+- (void) sendEmacsEvent: (struct input_event *)emacs_event
+                NSEvent: (NSEvent *)e
+          frameOrWindow: (void *)frame_or_window;
+@end
 
 /* ==========================================================================
 

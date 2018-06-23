@@ -1310,7 +1310,10 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame,
 
   f->output_data.ns->in_animation = NO;
 
-  f->output_data.ns->frame = [[EmacsFrame alloc] initWithEmacsframe:f];
+  f->output_data.ns->frame =
+    [(EmacsFrame *)[[[MainThreadProxy alloc] initWithObject:[EmacsFrame alloc]
+                                              waitUntilDone:YES] autorelease]
+        initWithEmacsframe:f];
 
   ns_icon (f, parms);
 
@@ -2141,7 +2144,6 @@ In case the execution fails, an error is signaled.  */)
   Lisp_Object result;
   int status;
   NSEvent *nxev;
-  struct input_event ev;
 
   CHECK_STRING (script);
   check_window_system (NULL);
@@ -2166,13 +2168,6 @@ In case the execution fails, an error is signaled.  */)
                                data2: NSAPP_DATA2_RUNASSCRIPT];
 
   [NSApp postEvent: nxev atStart: NO];
-
-  /* If there are other events, the event loop may exit.  Keep running
-     until the script has been handled.  */
-  ns_init_events (&ev);
-  while (! NILP (as_script))
-    [NSApp run];
-  ns_finish_events ();
 
   status = as_status;
   as_status = 0;

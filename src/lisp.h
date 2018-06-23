@@ -4717,6 +4717,10 @@ extern void syms_of_xterm (void);
 extern char *get_keysym_name (int);
 #endif /* HAVE_WINDOW_SYSTEM */
 
+#ifdef HAVE_NS
+extern int emacs_main (int, char **);
+#endif
+
 /* Defined in xml.c.  */
 extern void syms_of_xml (void);
 #ifdef HAVE_LIBXML2

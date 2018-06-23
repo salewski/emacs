@@ -192,6 +192,8 @@ char const * nstrace_fullscreen_type_name (int fs_type)
 
    ========================================================================== */
 
+EmacsThread *emacsMainThread;
+
 /* Convert a symbol indexed with an NSxxx value to a value as defined
    in keyboard.c (lispy_function_key). I hope this is a correct way
    of doing things...  */
@@ -298,19 +300,8 @@ static BOOL ns_menu_bar_is_hidden = NO;
 /* static int debug_lock = 0; */
 
 /* event loop */
-static BOOL send_appdefined = YES;
-#define NO_APPDEFINED_DATA (-8)
-static int last_appdefined_event_data = NO_APPDEFINED_DATA;
-static NSTimer *timed_entry = 0;
 static NSTimer *scroll_repeat_entry = nil;
-static fd_set select_readfds, select_writefds;
-enum { SELECT_HAVE_READ = 1, SELECT_HAVE_WRITE = 2, SELECT_HAVE_TMO = 4 };
-static int select_nfds = 0, select_valid = 0;
-static struct timespec select_timeout = { 0, 0 };
-static int selfds[2] = { -1, -1 };
-static pthread_mutex_t select_mutex;
 static NSAutoreleasePool *outerpool;
-static struct input_event *emacs_event = NULL;
 static struct input_event *q_event_ptr = NULL;
 static int n_emacs_events_pending = 0;
 static NSMutableArray *ns_pending_files, *ns_pending_service_names,
@@ -322,13 +313,6 @@ static BOOL ns_last_use_native_fullscreen;
    start.  */
 
 static BOOL any_help_event_p = NO;
-
-static struct {
-  struct input_event *q;
-  int nr, cap;
-} hold_event_q = {
-  NULL, 0, 0
-};
 
 #ifdef NS_IMPL_COCOA
 /*
@@ -448,28 +432,9 @@ ev_modifiers_helper (unsigned int flags, unsigned int left_mask,
 /* This is a piece of code which is common to all the event handling
    methods.  Maybe it should even be a function.  */
 #define EV_TRAILER(e)                                                   \
-  {                                                                     \
-    XSETFRAME (emacs_event->frame_or_window, emacsframe);               \
-    EV_TRAILER2 (e);                                                    \
-  }
-
-#define EV_TRAILER2(e)                                                  \
-  {                                                                     \
-      if (e) emacs_event->timestamp = EV_TIMESTAMP (e);                 \
-      if (q_event_ptr)                                                  \
-        {                                                               \
-          Lisp_Object tem = Vinhibit_quit;                              \
-          Vinhibit_quit = Qt;                                           \
-          n_emacs_events_pending++;                                     \
-          kbd_buffer_store_event_hold (emacs_event, q_event_ptr);       \
-          Vinhibit_quit = tem;                                          \
-        }                                                               \
-      else                                                              \
-        hold_event (emacs_event);                                       \
-      EVENT_INIT (*emacs_event);                                        \
-      ns_send_appdefined (-1);                                          \
-    }
-
+  [emacsMainThread sendEmacsEvent:&emacs_event                          \
+                          NSEvent:e                                     \
+                    frameOrWindow:emacsframe];
 
 /* These flags will be OR'd or XOR'd with the NSWindow's styleMask
    property depending on what we're doing.  */
@@ -489,36 +454,6 @@ static void ns_judge_scroll_bars (struct frame *f);
     Utilities
 
    ========================================================================== */
-
-void
-ns_init_events (struct input_event *ev)
-{
-  EVENT_INIT (*ev);
-  emacs_event = ev;
-}
-
-void
-ns_finish_events (void)
-{
-  emacs_event = NULL;
-}
-
-static void
-hold_event (struct input_event *event)
-{
-  if (hold_event_q.nr == hold_event_q.cap)
-    {
-      if (hold_event_q.cap == 0) hold_event_q.cap = 10;
-      else hold_event_q.cap *= 2;
-      hold_event_q.q =
-        xrealloc (hold_event_q.q, hold_event_q.cap * sizeof *hold_event_q.q);
-    }
-
-  hold_event_q.q[hold_event_q.nr++] = *event;
-  /* Make sure ns_read_socket is called, i.e. we have input.  */
-  raise (SIGIO);
-  send_appdefined = YES;
-}
 
 static Lisp_Object
 append2 (Lisp_Object list, Lisp_Object item)
@@ -4181,78 +4116,6 @@ ns_draw_glyph_string (struct glyph_string *s)
 
    ========================================================================== */
 
-
-static void
-ns_send_appdefined (int value)
-/* --------------------------------------------------------------------------
-    Internal: post an appdefined event which EmacsApp-sendEvent will
-              recognize and take as a command to halt the event loop.
-   -------------------------------------------------------------------------- */
-{
-  NSTRACE_WHEN (NSTRACE_GROUP_EVENTS, "ns_send_appdefined(%d)", value);
-
-  // GNUstep needs postEvent to happen on the main thread.
-  // Cocoa needs nextEventMatchingMask to happen on the main thread too.
-  if (! [[NSThread currentThread] isMainThread])
-    {
-      EmacsApp *app = (EmacsApp *)NSApp;
-      app->nextappdefined = value;
-      [app performSelectorOnMainThread:@selector (sendFromMainThread:)
-                            withObject:nil
-                         waitUntilDone:NO];
-      return;
-    }
-
-  /* Only post this event if we haven't already posted one.  This will end
-     the [NXApp run] main loop after having processed all events queued at
-     this moment.  */
-
-#ifdef NS_IMPL_COCOA
-  if (! send_appdefined)
-    {
-      /* OS X 10.10.1 swallows the AppDefined event we are sending ourselves
-         in certain situations (rapid incoming events).
-         So check if we have one, if not add one.  */
-      NSEvent *appev = [NSApp nextEventMatchingMask:NSEventMaskApplicationDefined
-                                          untilDate:[NSDate distantPast]
-                                             inMode:NSDefaultRunLoopMode
-                                            dequeue:NO];
-      if (! appev) send_appdefined = YES;
-    }
-#endif
-
-  if (send_appdefined)
-    {
-      NSEvent *nxev;
-
-      /* We only need one NX_APPDEFINED event to stop NXApp from running.  */
-      send_appdefined = NO;
-
-      /* Don't need wakeup timer any more.  */
-      if (timed_entry)
-        {
-          [timed_entry invalidate];
-          [timed_entry release];
-          timed_entry = nil;
-        }
-
-      nxev = [NSEvent otherEventWithType: NSEventTypeApplicationDefined
-                                location: NSMakePoint (0, 0)
-                           modifierFlags: 0
-                               timestamp: 0
-                            windowNumber: [[NSApp mainWindow] windowNumber]
-                                 context: [NSApp context]
-                                 subtype: 0
-                                   data1: value
-                                   data2: 0];
-
-      /* Post an application defined event on the event queue.  When this is
-         received the [NXApp run] will return, thus having processed all
-         events which are currently queued.  */
-      [NSApp postEvent: nxev atStart: NO];
-    }
-}
-
 #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
 static void
 check_native_fs ()
@@ -4298,10 +4161,13 @@ ns_check_menu_open (NSMenu *menu)
     found = menu == [[a objectAtIndex:i] submenu];
   if (found)
     {
-      if (menu_will_open_state == MENU_NONE && emacs_event)
+      if (menu_will_open_state == MENU_NONE)
         {
           NSEvent *theEvent = [NSApp currentEvent];
           struct frame *emacsframe = SELECTED_FRAME ();
+          struct input_event emacs_event;
+
+          EVENT_INIT (emacs_event);
 
           /* On macOS, the following can cause an event loop when the
              Spotlight for Help search field is populated.  Avoid this by
@@ -4312,7 +4178,7 @@ ns_check_menu_open (NSMenu *menu)
             {
               [menu cancelTracking];
               menu_will_open_state = MENU_PENDING;
-              emacs_event->kind = MENU_BAR_ACTIVATE_EVENT;
+              emacs_event.kind = MENU_BAR_ACTIVATE_EVENT;
               EV_TRAILER (theEvent);
 
               CGEventRef ourEvent = CGEventCreate (NULL);
@@ -4358,7 +4224,6 @@ ns_read_socket (struct terminal *terminal, struct input_event *hold_quit)
      From 21+ we have to manage the event buffer ourselves.
    -------------------------------------------------------------------------- */
 {
-  struct input_event ev;
   int nevents;
 
   NSTRACE_WHEN (NSTRACE_GROUP_EVENTS, "ns_read_socket");
@@ -4370,20 +4235,10 @@ ns_read_socket (struct terminal *terminal, struct input_event *hold_quit)
   if ([NSApp modalWindow] != nil)
     return -1;
 
-  if (hold_event_q.nr > 0)
-    {
-      int i;
-      for (i = 0; i < hold_event_q.nr; ++i)
-        kbd_buffer_store_event_hold (&hold_event_q.q[i], hold_quit);
-      hold_event_q.nr = 0;
-      return i;
-    }
-
-  if ([NSThread isMainThread])
+  if ([NSThread currentThread] == emacsMainThread)
     {
       block_input ();
       n_emacs_events_pending = 0;
-      ns_init_events (&ev);
       q_event_ptr = hold_quit;
 
       /* We manage autorelease pools by allocate/reallocate each time around
@@ -4409,17 +4264,19 @@ ns_read_socket (struct terminal *terminal, struct input_event *hold_quit)
         }
       else
         {
-          /* Run and wait for events.  We must always send one NX_APPDEFINED event
-             to ourself, otherwise [NXApp run] will never exit.  */
-          send_appdefined = YES;
-          ns_send_appdefined (-1);
+          /* Run this thread's RunLoop.  This will process all events
+             sent by the NS GUI thread.
 
-          [NSApp run];
+             We use CFRunLoop instead of NSRunLoop as it allows us to
+             run once and check why it returned.  If it processed an
+             event we want it to try again, if it "times out" then
+             there was nothing more to process and we finish up.  */
+          while (CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, YES)
+                 == kCFRunLoopRunHandledSource);
         }
 
       nevents = n_emacs_events_pending;
       n_emacs_events_pending = 0;
-      ns_finish_events ();
       q_event_ptr = NULL;
       unblock_input ();
     }
@@ -4438,155 +4295,15 @@ ns_select (int nfds, fd_set *readfds, fd_set *writefds,
      Replacement for select, checking for events
    -------------------------------------------------------------------------- */
 {
-  int result;
-  int t, k, nr = 0;
-  struct input_event event;
-  char c;
-
   NSTRACE_WHEN (NSTRACE_GROUP_EVENTS, "ns_select");
 
 #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
   check_native_fs ();
 #endif
 
-  if (hold_event_q.nr > 0)
-    {
-      /* We already have events pending.  */
-      raise (SIGIO);
-      errno = EINTR;
-      return -1;
-    }
-
-  for (k = 0; k < nfds+1; k++)
-    {
-      if (readfds && FD_ISSET(k, readfds)) ++nr;
-      if (writefds && FD_ISSET(k, writefds)) ++nr;
-    }
-
-  if (NSApp == nil
-      || ![NSThread isMainThread]
-      || (timeout && timeout->tv_sec == 0 && timeout->tv_nsec == 0))
-    return thread_select(pselect, nfds, readfds, writefds,
+  return thread_select(pselect, nfds, readfds, writefds,
                          exceptfds, timeout, sigmask);
-  else
-    {
-      struct timespec t = {0, 0};
-      thread_select(pselect, 0, NULL, NULL, NULL, &t, sigmask);
-    }
-
-  [outerpool release];
-  outerpool = [[NSAutoreleasePool alloc] init];
-
-
-  send_appdefined = YES;
-  if (nr > 0)
-    {
-      pthread_mutex_lock (&select_mutex);
-      select_nfds = nfds;
-      select_valid = 0;
-      if (readfds)
-        {
-          select_readfds = *readfds;
-          select_valid += SELECT_HAVE_READ;
-        }
-      if (writefds)
-        {
-          select_writefds = *writefds;
-          select_valid += SELECT_HAVE_WRITE;
-        }
-
-      if (timeout)
-        {
-          select_timeout = *timeout;
-          select_valid += SELECT_HAVE_TMO;
-        }
-
-      pthread_mutex_unlock (&select_mutex);
-
-      /* Inform fd_handler that select should be called.  */
-      c = 'g';
-      emacs_write_sig (selfds[1], &c, 1);
-    }
-  else if (nr == 0 && timeout)
-    {
-      /* No file descriptor, just a timeout, no need to wake fd_handler.  */
-      double time = timespectod (*timeout);
-      timed_entry = [[NSTimer scheduledTimerWithTimeInterval: time
-                                                      target: NSApp
-                                                    selector:
-                                  @selector (timeout_handler:)
-                                                    userInfo: 0
-                                                     repeats: NO]
-                      retain];
-    }
-  else /* No timeout and no file descriptors, can this happen?  */
-    {
-      /* Send appdefined so we exit from the loop.  */
-      ns_send_appdefined (-1);
-    }
-
-  block_input ();
-  ns_init_events (&event);
-
-  [NSApp run];
-
-  ns_finish_events ();
-  if (nr > 0 && readfds)
-    {
-      c = 's';
-      emacs_write_sig (selfds[1], &c, 1);
-    }
-  unblock_input ();
-
-  t = last_appdefined_event_data;
-
-  if (t != NO_APPDEFINED_DATA)
-    {
-      last_appdefined_event_data = NO_APPDEFINED_DATA;
-
-      if (t == -2)
-        {
-          /* The NX_APPDEFINED event we received was a timeout.  */
-          result = 0;
-        }
-      else if (t == -1)
-        {
-          /* The NX_APPDEFINED event we received was the result of
-             at least one real input event arriving.  */
-          errno = EINTR;
-          result = -1;
-        }
-      else
-        {
-          /* Received back from select () in fd_handler; copy the results.  */
-          pthread_mutex_lock (&select_mutex);
-          if (readfds) *readfds = select_readfds;
-          if (writefds) *writefds = select_writefds;
-          pthread_mutex_unlock (&select_mutex);
-          result = t;
-        }
-    }
-  else
-    {
-      errno = EINTR;
-      result = -1;
-    }
-
-  return result;
 }
-
-#ifdef HAVE_PTHREAD
-void
-ns_run_loop_break ()
-/* Break out of the NS run loop in ns_select or ns_read_socket.  */
-{
-  NSTRACE_WHEN (NSTRACE_GROUP_EVENTS, "ns_run_loop_break");
-
-  /* If we don't have a GUI, don't send the event.  */
-  if (NSApp != NULL)
-    ns_send_appdefined(-1);
-}
-#endif
 
 
 /* ==========================================================================
@@ -5118,9 +4835,6 @@ ns_term_init (Lisp_Object display_name)
 
   NSTRACE ("ns_term_init");
 
-  [outerpool release];
-  outerpool = [[NSAutoreleasePool alloc] init];
-
   /* count object allocs (About, click icon); on macOS use ObjectAlloc tool */
   /*GSDebugAllocationActive (YES); */
   block_input ();
@@ -5128,37 +4842,9 @@ ns_term_init (Lisp_Object display_name)
   baud_rate = 38400;
   Fset_input_interrupt_mode (Qnil);
 
-  if (selfds[0] == -1)
-    {
-      if (emacs_pipe (selfds) != 0)
-        {
-          fprintf (stderr, "Failed to create pipe: %s\n",
-                   emacs_strerror (errno));
-          emacs_abort ();
-        }
-
-      fcntl (selfds[0], F_SETFL, O_NONBLOCK|fcntl (selfds[0], F_GETFL));
-      FD_ZERO (&select_readfds);
-      FD_ZERO (&select_writefds);
-      pthread_mutex_init (&select_mutex, NULL);
-    }
-
   ns_pending_files = [[NSMutableArray alloc] init];
   ns_pending_service_names = [[NSMutableArray alloc] init];
   ns_pending_service_args = [[NSMutableArray alloc] init];
-
-  /* Start app and create the main menu, window, view.
-     Needs to be here because ns_initialize_display_info () uses AppKit classes.
-     The view will then ask the NSApp to stop and return to Emacs.  */
-  [EmacsApp sharedApplication];
-  if (NSApp == nil)
-    return NULL;
-  [NSApp setDelegate: NSApp];
-
-  /* Start the select thread.  */
-  [NSThread detachNewThreadSelector:@selector (fd_handler:)
-                           toTarget:NSApp
-                         withObject:nil];
 
   /* debugging: log all notifications */
   /*   [[NSNotificationCenter defaultCenter] addObserver: NSApp
@@ -5356,9 +5042,9 @@ ns_term_init (Lisp_Object display_name)
      right for fullscreen windows, so set this.  */
   [NSApp activateIgnoringOtherApps:YES];
 
-  NSTRACE_MSG ("Call NSApp run");
+  // NSTRACE_MSG ("Call NSApp run");
 
-  [NSApp run];
+  // [NSApp run];
   ns_do_open_file = YES;
 
 #ifdef NS_IMPL_GNUSTEP
@@ -5968,12 +5654,10 @@ ns_term_shutdown (int sig)
 #ifdef NS_IMPL_COCOA
         case NSAPP_DATA2_RUNASSCRIPT:
           ns_run_ascript ();
-          [self stop: self];
           return;
 #endif
         case NSAPP_DATA2_RUNFILEDIALOG:
           ns_run_file_dialog ();
-          [self stop: self];
           return;
         }
     }
@@ -5983,24 +5667,6 @@ ns_term_shutdown (int sig)
       fputs ("Dropping external cursor update event.\n", stderr);
       return;
     }
-
-  if (type == NSEventTypeApplicationDefined)
-    {
-      /* Events posted by ns_send_appdefined interrupt the run loop here.
-         But, if a modal window is up, an appdefined can still come through,
-         (e.g., from a makeKeyWindow event) but stopping self also stops the
-         modal loop. Just defer it until later.  */
-      if ([NSApp modalWindow] == nil)
-        {
-          last_appdefined_event_data = [theEvent data1];
-          [self stop: self];
-        }
-      else
-        {
-          send_appdefined = YES;
-        }
-    }
-
 
 #ifdef NS_IMPL_COCOA
   /* If no dialog and none of our frames have focus and it is a move, skip it.
@@ -6028,12 +5694,13 @@ ns_term_shutdown (int sig)
 {
   struct frame *emacsframe = SELECTED_FRAME ();
   NSEvent *theEvent = [NSApp currentEvent];
+  struct input_event emacs_event;
 
-  if (!emacs_event)
-    return;
-  emacs_event->kind = NS_NONKEY_EVENT;
-  emacs_event->code = KEY_NS_SHOW_PREFS;
-  emacs_event->modifiers = 0;
+  EVENT_INIT (emacs_event);
+
+  emacs_event.kind = NS_NONKEY_EVENT;
+  emacs_event.code = KEY_NS_SHOW_PREFS;
+  emacs_event.modifiers = 0;
   EV_TRAILER (theEvent);
 }
 
@@ -6044,12 +5711,13 @@ ns_term_shutdown (int sig)
 
   struct frame *emacsframe = SELECTED_FRAME ();
   NSEvent *theEvent = [NSApp currentEvent];
+  struct input_event emacs_event;
 
-  if (!emacs_event)
-    return;
-  emacs_event->kind = NS_NONKEY_EVENT;
-  emacs_event->code = KEY_NS_NEW_FRAME;
-  emacs_event->modifiers = 0;
+  EVENT_INIT (emacs_event);
+
+  emacs_event.kind = NS_NONKEY_EVENT;
+  emacs_event.code = KEY_NS_NEW_FRAME;
+  emacs_event.modifiers = 0;
   EV_TRAILER (theEvent);
 }
 
@@ -6061,15 +5729,15 @@ ns_term_shutdown (int sig)
 
   struct frame *emacsframe = SELECTED_FRAME ();
   NSEvent *theEvent = [NSApp currentEvent];
+  struct input_event emacs_event;
 
-  if (!emacs_event)
-    return NO;
+  EVENT_INIT (emacs_event);
 
-  emacs_event->kind = NS_NONKEY_EVENT;
-  emacs_event->code = KEY_NS_OPEN_FILE_LINE;
+  emacs_event.kind = NS_NONKEY_EVENT;
+  emacs_event.code = KEY_NS_OPEN_FILE_LINE;
   ns_input_file = append2 (ns_input_file, build_string ([fileName UTF8String]));
   ns_input_line = Qnil; /* can be start or cons start,end */
-  emacs_event->modifiers =0;
+  emacs_event.modifiers = 0;
   EV_TRAILER (theEvent);
 
   return YES;
@@ -6115,8 +5783,6 @@ ns_term_shutdown (int sig)
 		 build_string("icons/hicolor/128x128/apps/emacs.png")]];
   }
 #endif
-
-  ns_send_appdefined (-2);
 }
 
 - (void)antialiasThresholdDidChange:(NSNotification *)notification
@@ -6153,13 +5819,13 @@ ns_term_shutdown (int sig)
   NSTRACE ("[EmacsApp terminate:]");
 
   struct frame *emacsframe = SELECTED_FRAME ();
+  struct input_event emacs_event;
 
-  if (!emacs_event)
-    return;
+  EVENT_INIT (emacs_event);
 
-  emacs_event->kind = NS_NONKEY_EVENT;
-  emacs_event->code = KEY_NS_POWER_OFF;
-  emacs_event->arg = Qt; /* mark as non-key event */
+  emacs_event.kind = NS_NONKEY_EVENT;
+  emacs_event.code = KEY_NS_POWER_OFF;
+  emacs_event.arg = Qt; /* mark as non-key event */
   EV_TRAILER ((id)nil);
 }
 
@@ -6287,121 +5953,7 @@ not_in_argv (NSString *arg)
   NSTRACE ("[EmacsApp applicationDidResignActive:]");
 
   // ns_app_active=NO;
-  ns_send_appdefined (-1);
 }
-
-
-
-/* ==========================================================================
-
-    EmacsApp aux handlers for managing event loop
-
-   ========================================================================== */
-
-
-- (void)timeout_handler: (NSTimer *)timedEntry
-/* --------------------------------------------------------------------------
-     The timeout specified to ns_select has passed.
-   -------------------------------------------------------------------------- */
-{
-  /* NSTRACE ("timeout_handler"); */
-  ns_send_appdefined (-2);
-}
-
-- (void)sendFromMainThread:(id)unused
-{
-  ns_send_appdefined (nextappdefined);
-}
-
-- (void)fd_handler:(id)unused
-/* --------------------------------------------------------------------------
-     Check data waiting on file descriptors and terminate if so.
-   -------------------------------------------------------------------------- */
-{
-  int result;
-  int waiting = 1, nfds;
-  char c;
-
-  fd_set readfds, writefds, *wfds;
-  struct timespec timeout, *tmo;
-  NSAutoreleasePool *pool = nil;
-
-  /* NSTRACE ("fd_handler"); */
-
-  for (;;)
-    {
-      [pool release];
-      pool = [[NSAutoreleasePool alloc] init];
-
-      if (waiting)
-        {
-          fd_set fds;
-          FD_ZERO (&fds);
-          FD_SET (selfds[0], &fds);
-          result = select (selfds[0]+1, &fds, NULL, NULL, NULL);
-          if (result > 0 && read (selfds[0], &c, 1) == 1 && c == 'g')
-	    waiting = 0;
-        }
-      else
-        {
-          pthread_mutex_lock (&select_mutex);
-          nfds = select_nfds;
-
-          if (select_valid & SELECT_HAVE_READ)
-            readfds = select_readfds;
-          else
-            FD_ZERO (&readfds);
-
-          if (select_valid & SELECT_HAVE_WRITE)
-            {
-              writefds = select_writefds;
-              wfds = &writefds;
-            }
-          else
-            wfds = NULL;
-          if (select_valid & SELECT_HAVE_TMO)
-            {
-              timeout = select_timeout;
-              tmo = &timeout;
-            }
-          else
-            tmo = NULL;
-
-          pthread_mutex_unlock (&select_mutex);
-
-          FD_SET (selfds[0], &readfds);
-          if (selfds[0] >= nfds) nfds = selfds[0]+1;
-
-          result = pselect (nfds, &readfds, wfds, NULL, tmo, NULL);
-
-          if (result == 0)
-            ns_send_appdefined (-2);
-          else if (result > 0)
-            {
-              if (FD_ISSET (selfds[0], &readfds))
-                {
-                  if (read (selfds[0], &c, 1) == 1 && c == 's')
-		    waiting = 1;
-                }
-              else
-                {
-                  pthread_mutex_lock (&select_mutex);
-                  if (select_valid & SELECT_HAVE_READ)
-                    select_readfds = readfds;
-                  if (select_valid & SELECT_HAVE_WRITE)
-                    select_writefds = writefds;
-                  if (select_valid & SELECT_HAVE_TMO)
-                    select_timeout = timeout;
-                  pthread_mutex_unlock (&select_mutex);
-
-                  ns_send_appdefined (result);
-                }
-            }
-          waiting = 1;
-        }
-    }
-}
-
 
 
 /* ==========================================================================
@@ -6426,20 +5978,28 @@ not_in_argv (NSString *arg)
 {
   struct frame *emacsframe = SELECTED_FRAME ();
   NSEvent *theEvent = [NSApp currentEvent];
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsApp fulfillService:withArg:]");
 
-  if (!emacs_event)
-    return NO;
+  EVENT_INIT (emacs_event);
 
-  emacs_event->kind = NS_NONKEY_EVENT;
-  emacs_event->code = KEY_NS_SPI_SERVICE_CALL;
+  emacs_event.kind = NS_NONKEY_EVENT;
+  emacs_event.code = KEY_NS_SPI_SERVICE_CALL;
   ns_input_spi_name = build_string ([name UTF8String]);
   ns_input_spi_arg = build_string ([arg UTF8String]);
-  emacs_event->modifiers = EV_MODIFIERS (theEvent);
+  emacs_event.modifiers = EV_MODIFIERS (theEvent);
   EV_TRAILER (theEvent);
 
   return YES;
+}
+
+-(void) initLispThread:(int)argc withArgv:(char **)argv
+{
+  [outerpool release];
+  outerpool = [[NSAutoreleasePool alloc] init];
+
+  emacs_main (argc, argv);
 }
 
 
@@ -6483,11 +6043,11 @@ not_in_argv (NSString *arg)
   id newFont;
   CGFloat size;
   NSFont *nsfont;
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView changeFont:]");
 
-  if (!emacs_event)
-    return;
+  EVENT_INIT (emacs_event);
 
 #ifdef NS_IMPL_GNUSTEP
   nsfont = ((struct nsfont_info *)font)->nsfont;
@@ -6500,9 +6060,9 @@ not_in_argv (NSString *arg)
     {
       SET_FRAME_GARBAGED (emacsframe); /* now needed as of 2008/10 */
 
-      emacs_event->kind = NS_NONKEY_EVENT;
-      emacs_event->modifiers = 0;
-      emacs_event->code = KEY_NS_CHANGE_FONT;
+      emacs_event.kind = NS_NONKEY_EVENT;
+      emacs_event.modifiers = 0;
+      emacs_event.code = KEY_NS_CHANGE_FONT;
 
       size = [newFont pointSize];
       ns_input_fontsize = make_fixnum (lrint (size));
@@ -6552,6 +6112,7 @@ not_in_argv (NSString *arg)
   unsigned fnKeysym = 0;
   static NSMutableArray *nsEvArray;
   unsigned int flags = [theEvent modifierFlags];
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView keyDown:]");
 
@@ -6561,8 +6122,7 @@ not_in_argv (NSString *arg)
   else if ([theEvent type] != NSEventTypeKeyDown)
     return;
 
-  if (!emacs_event)
-    return;
+  EVENT_INIT (emacs_event);
 
  if (![[self window] isKeyWindow]
      && [[theEvent window] isKindOfClass: [EmacsWindow class]]
@@ -6644,7 +6204,7 @@ not_in_argv (NSString *arg)
          Therefore its return value is the set of control-like
          modifiers.  */
       Lisp_Object kind = fnKeysym ? QCfunction : QCordinary;
-      emacs_event->modifiers = EV_MODIFIERS2 (flags, kind);
+      emacs_event.modifiers = EV_MODIFIERS2 (flags, kind);
 
       /* Function keys (such as the F-keys, arrow keys, etc.) set
          modifiers as though the fn key has been pressed when it
@@ -6653,21 +6213,21 @@ not_in_argv (NSString *arg)
          <home>).  We need to unset the fn modifier in these cases.
          FIXME: Can we avoid setting it in the first place?  */
       if (fnKeysym && (flags & NS_FUNCTION_KEY_MASK))
-        emacs_event->modifiers
+        emacs_event.modifiers
           ^= parse_solitary_modifier (mod_of_kind (ns_function_modifier,
                                                    QCfunction));
 
       if (NS_KEYLOG)
         fprintf (stderr, "keyDown: code =%x\tfnKey =%x\tflags = %x\tmods = %x\n",
-                 code, fnKeysym, flags, emacs_event->modifiers);
+                 code, fnKeysym, flags, emacs_event.modifiers);
 
       /* If it was a function key or had control-like modifiers, pass
          it directly to Emacs.  */
-      if (fnKeysym || (emacs_event->modifiers
-                       && (emacs_event->modifiers != shift_modifier)
+      if (fnKeysym || (emacs_event.modifiers
+                       && (emacs_event.modifiers != shift_modifier)
                        && [[theEvent charactersIgnoringModifiers] length] > 0))
         {
-          emacs_event->kind = NON_ASCII_KEYSTROKE_EVENT;
+          emacs_event.kind = NON_ASCII_KEYSTROKE_EVENT;
           /* FIXME: What are the next four lines supposed to do?  */
           if (code < 0x20)
             code |= (1<<28)|(3<<16);
@@ -6686,12 +6246,14 @@ not_in_argv (NSString *arg)
                  [0x80, 0xFF] are not ASCII characters.  Can’t we just
                  use MULTIBYTE_CHAR_KEYSTROKE_EVENT here for all kinds
                  of characters?  */
-              emacs_event->kind = code > 0xFF
+              emacs_event.kind = code > 0xFF
                 ? MULTIBYTE_CHAR_KEYSTROKE_EVENT : ASCII_KEYSTROKE_EVENT;
             }
 
-          emacs_event->code = code;
+          emacs_event.code = code;
+
           EV_TRAILER (theEvent);
+
           processingCompose = NO;
           return;
         }
@@ -6739,6 +6301,7 @@ not_in_argv (NSString *arg)
 {
   NSString *s;
   NSUInteger len;
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView insertText:]");
 
@@ -6753,8 +6316,7 @@ not_in_argv (NSString *arg)
     NSLog (@"insertText '%@'\tlen = %lu", aString, (unsigned long) len);
   processingCompose = NO;
 
-  if (!emacs_event)
-    return;
+  EVENT_INIT(emacs_event);
 
   /* First, clear any working text.  */
   if (workingText != nil)
@@ -6782,10 +6344,10 @@ not_in_argv (NSString *arg)
       if (code == 0x2DC)
         code = '~'; /* 0x7E */
       if (code != 32) /* Space */
-        emacs_event->modifiers = 0;
-      emacs_event->kind
+        emacs_event.modifiers = 0;
+      emacs_event.kind
 	= code > 0xFF ? MULTIBYTE_CHAR_KEYSTROKE_EVENT : ASCII_KEYSTROKE_EVENT;
-      emacs_event->code = code;
+      emacs_event.code = code;
       EV_TRAILER ((id)nil);
     }
 }
@@ -6796,6 +6358,7 @@ not_in_argv (NSString *arg)
 {
   NSString *str = [aString respondsToSelector: @selector (string)] ?
     [aString string] : aString;
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView setMarkedText:selectedRange:]");
 
@@ -6811,16 +6374,15 @@ not_in_argv (NSString *arg)
       return;
     }
 
-  if (!emacs_event)
-    return;
+  EVENT_INIT (emacs_event);
 
   processingCompose = YES;
   [workingText release];
   workingText = [str copy];
   ns_working_text = build_string ([workingText UTF8String]);
 
-  emacs_event->kind = NS_TEXT_EVENT;
-  emacs_event->code = KEY_NS_PUT_WORKING_TEXT;
+  emacs_event.kind = NS_TEXT_EVENT;
+  emacs_event.code = KEY_NS_PUT_WORKING_TEXT;
   EV_TRAILER ((id)nil);
 }
 
@@ -6828,6 +6390,8 @@ not_in_argv (NSString *arg)
 /* Delete display of composing characters [not in <NSTextInput>].  */
 - (void)deleteWorkingText
 {
+  struct input_event emacs_event;
+
   NSTRACE ("[EmacsView deleteWorkingText]");
 
   if (workingText == nil)
@@ -6838,11 +6402,10 @@ not_in_argv (NSString *arg)
   workingText = nil;
   processingCompose = NO;
 
-  if (!emacs_event)
-    return;
+  EVENT_INIT (emacs_event);
 
-  emacs_event->kind = NS_TEXT_EVENT;
-  emacs_event->code = KEY_NS_UNPUT_WORKING_TEXT;
+  emacs_event.kind = NS_TEXT_EVENT;
+  emacs_event.code = KEY_NS_UNPUT_WORKING_TEXT;
   EV_TRAILER ((id)nil);
 }
 
@@ -6943,12 +6506,12 @@ not_in_argv (NSString *arg)
   processingCompose = NO;
   if (aSelector == @selector (deleteBackward:))
     {
-      /* Happens when user backspaces over an ongoing composition:
+      struct input_event emacs_event;
+     /* Happens when user backspaces over an ongoing composition:
          throw a 'delete' into the event queue.  */
-      if (!emacs_event)
-        return;
-      emacs_event->kind = NON_ASCII_KEYSTROKE_EVENT;
-      emacs_event->code = 0xFF08;
+      EVENT_INIT (emacs_event);
+      emacs_event.kind = NON_ASCII_KEYSTROKE_EVENT;
+      emacs_event.code = 0xFF08;
       EV_TRAILER ((id)nil);
     }
 }
@@ -6998,11 +6561,11 @@ not_in_argv (NSString *arg)
 {
   struct ns_display_info *dpyinfo = FRAME_DISPLAY_INFO (emacsframe);
   NSPoint p = [self convertPoint: [theEvent locationInWindow] fromView: nil];
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView mouseDown:]");
 
-  if (!emacs_event)
-    return;
+  EVENT_INIT (emacs_event);
 
   dpyinfo->last_mouse_frame = emacsframe;
   /* Appears to be needed to prevent spurious movement events generated on
@@ -7111,11 +6674,11 @@ not_in_argv (NSString *arg)
           if (lines == 0)
             return;
 
-          emacs_event->kind = horizontal ? HORIZ_WHEEL_EVENT : WHEEL_EVENT;
-          emacs_event->arg = (make_fixnum (lines));
+          emacs_event.kind = horizontal ? HORIZ_WHEEL_EVENT : WHEEL_EVENT;
+          emacs_event.arg = (make_fixnum (lines));
 
-          emacs_event->code = 0;
-          emacs_event->modifiers = EV_MODIFIERS (theEvent) |
+          emacs_event.code = 0;
+          emacs_event.modifiers = EV_MODIFIERS (theEvent) |
             (scrollUp ? up_modifier : down_modifier);
 #if MAC_OS_X_VERSION_MIN_REQUIRED < 1070
         }
@@ -7135,27 +6698,27 @@ not_in_argv (NSString *arg)
                   NSTRACE_MSG ("deltaIsZero");
                   return;
                 }
-              emacs_event->kind = HORIZ_WHEEL_EVENT;
+              emacs_event.kind = HORIZ_WHEEL_EVENT;
             }
           else
-            emacs_event->kind = WHEEL_EVENT;
+            emacs_event.kind = WHEEL_EVENT;
 
-          emacs_event->code = 0;
-          emacs_event->modifiers = EV_MODIFIERS (theEvent) |
+          emacs_event.code = 0;
+          emacs_event.modifiers = EV_MODIFIERS (theEvent) |
             ((delta > 0) ? up_modifier : down_modifier);
         }
 #endif
     }
   else
     {
-      emacs_event->kind = MOUSE_CLICK_EVENT;
-      emacs_event->code = EV_BUTTON (theEvent);
-      emacs_event->modifiers = EV_MODIFIERS (theEvent)
+      emacs_event.kind = MOUSE_CLICK_EVENT;
+      emacs_event.code = EV_BUTTON (theEvent);
+      emacs_event.modifiers = EV_MODIFIERS (theEvent)
                              | EV_UDMODIFIERS (theEvent);
     }
 
-  XSETINT (emacs_event->x, lrint (p.x));
-  XSETINT (emacs_event->y, lrint (p.y));
+  XSETINT (emacs_event.x, lrint (p.x));
+  XSETINT (emacs_event.y, lrint (p.y));
   EV_TRAILER (theEvent);
   return;
 }
@@ -7243,10 +6806,14 @@ not_in_argv (NSString *arg)
               || (EQ (XWINDOW (window)->frame,
                       XWINDOW (selected_window)->frame))))
         {
+          struct input_event emacs_event;
+
           NSTRACE_MSG ("in_window");
-          emacs_event->kind = SELECT_WINDOW_EVENT;
-          emacs_event->frame_or_window = window;
-          EV_TRAILER2 (e);
+          EVENT_INIT (emacs_event);
+
+          emacs_event.kind = SELECT_WINDOW_EVENT;
+          emacs_event.frame_or_window = window;
+          EV_TRAILER (e);
         }
       /* Remember the last window where we saw the mouse.  */
       last_mouse_window = window;
@@ -7266,8 +6833,8 @@ not_in_argv (NSString *arg)
                       help_echo_object, help_echo_pos);
     }
 
-  if (emacsframe->mouse_moved && send_appdefined)
-    ns_send_appdefined (-1);
+  if (emacsframe->mouse_moved)
+    raise (SIGIO);
 }
 
 
@@ -7295,14 +6862,14 @@ not_in_argv (NSString *arg)
 - (BOOL)windowShouldClose: (id)sender
 {
   NSEvent *e =[[self window] currentEvent];
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView windowShouldClose:]");
   windowClosing = YES;
-  if (!emacs_event)
-    return NO;
-  emacs_event->kind = DELETE_WINDOW_EVENT;
-  emacs_event->modifiers = 0;
-  emacs_event->code = 0;
+  EVENT_INIT (emacs_event);
+  emacs_event.kind = DELETE_WINDOW_EVENT;
+  emacs_event.modifiers = 0;
+  emacs_event.code = 0;
   EV_TRAILER (e);
   /* Don't close this window, let this be done from lisp code.  */
   return NO;
@@ -7550,8 +7117,6 @@ not_in_argv (NSString *arg)
     {
       [self updateFrameSize: YES];
     }
-
-  ns_send_appdefined (-1);
 }
 
 #ifdef NS_IMPL_COCOA
@@ -7582,19 +7147,19 @@ not_in_argv (NSString *arg)
 {
   struct ns_display_info *dpyinfo = FRAME_DISPLAY_INFO (emacsframe);
   struct frame *old_focus = dpyinfo->ns_focus_frame;
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView windowDidBecomeKey]");
+
+  EVENT_INIT (emacs_event);
 
   if (emacsframe != old_focus)
     dpyinfo->ns_focus_frame = emacsframe;
 
   ns_frame_rehighlight (emacsframe);
 
-  if (emacs_event)
-    {
-      emacs_event->kind = FOCUS_IN_EVENT;
-      EV_TRAILER ((id)nil);
-    }
+  emacs_event.kind = FOCUS_IN_EVENT;
+  EV_TRAILER ((id)nil);
 }
 
 
@@ -7603,6 +7168,8 @@ not_in_argv (NSString *arg)
 {
   struct ns_display_info *dpyinfo = FRAME_DISPLAY_INFO (emacsframe);
   BOOL is_focus_frame = dpyinfo->ns_focus_frame == emacsframe;
+  struct input_event emacs_event;
+
   NSTRACE ("[EmacsView windowDidResignKey:]");
 
   if (is_focus_frame)
@@ -7627,9 +7194,10 @@ not_in_argv (NSString *arg)
       gen_help_event (Qnil, frame, Qnil, Qnil, 0);
     }
 
-  if (emacs_event && is_focus_frame)
+  if (is_focus_frame)
     {
-      emacs_event->kind = FOCUS_OUT_EVENT;
+      EVENT_INIT (emacs_event);
+      emacs_event.kind = FOCUS_OUT_EVENT;
       EV_TRAILER ((id)nil);
     }
 }
@@ -7858,6 +7426,7 @@ not_in_argv (NSString *arg)
   NSRect r = [win frame];
   NSArray *screens = [NSScreen screens];
   NSScreen *screen = [screens objectAtIndex: 0];
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView windowDidMove:]");
 
@@ -7865,6 +7434,8 @@ not_in_argv (NSString *arg)
     return;
   if (screen != nil)
     {
+      EVENT_INIT (emacs_event);
+
       emacsframe->left_pos = r.origin.x - NS_PARENT_WINDOW_LEFT_POS (emacsframe);
       emacsframe->top_pos =
         NS_PARENT_WINDOW_TOP_POS (emacsframe) - (r.origin.y + r.size.height);
@@ -7872,7 +7443,7 @@ not_in_argv (NSString *arg)
       // FIXME: after event part below didExitFullScreen is not received
       // if (emacs_event)
       //   {
-      //     emacs_event->kind = MOVE_FRAME_EVENT;
+      //     emacs_event.kind = MOVE_FRAME_EVENT;
       //     EV_TRAILER ((id)nil);
       //   }
     }
@@ -8016,7 +7587,12 @@ not_in_argv (NSString *arg)
 
 - (void)windowDidDeminiaturize: sender
 {
+  struct input_event emacs_event;
+
   NSTRACE ("[EmacsView windowDidDeminiaturize:]");
+
+  EVENT_INIT (emacs_event);
+
   if (!emacsframe->output_data.ns)
     return;
 
@@ -8024,11 +7600,8 @@ not_in_argv (NSString *arg)
   SET_FRAME_VISIBLE (emacsframe, 1);
   windows_or_buffers_changed = 63;
 
-  if (emacs_event)
-    {
-      emacs_event->kind = DEICONIFY_EVENT;
-      EV_TRAILER ((id)nil);
-    }
+  emacs_event.kind = DEICONIFY_EVENT;
+  EV_TRAILER ((id)nil);
 }
 
 
@@ -8040,26 +7613,25 @@ not_in_argv (NSString *arg)
 
   SET_FRAME_VISIBLE (emacsframe, 1);
   SET_FRAME_GARBAGED (emacsframe);
-
-  if (send_appdefined)
-    ns_send_appdefined (-1);
 }
 
 
 - (void)windowDidMiniaturize: sender
 {
+  struct input_event emacs_event;
+
   NSTRACE ("[EmacsView windowDidMiniaturize:]");
+
+  EVENT_INIT (emacs_event);
+
   if (!emacsframe->output_data.ns)
     return;
 
   SET_FRAME_ICONIFIED (emacsframe, 1);
   SET_FRAME_VISIBLE (emacsframe, 0);
 
-  if (emacs_event)
-    {
-      emacs_event->kind = ICONIFY_EVENT;
-      EV_TRAILER ((id)nil);
-    }
+  emacs_event.kind = ICONIFY_EVENT;
+  EV_TRAILER ((id)nil);
 }
 
 #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
@@ -8505,7 +8077,6 @@ not_in_argv (NSString *arg)
                                     (void *)tag);
     }
 
-  ns_send_appdefined (-1);
   return self;
 }
 
@@ -8521,18 +8092,22 @@ not_in_argv (NSString *arg)
 {
   NSEvent *theEvent;
   int idx = [item tag] * TOOL_BAR_ITEM_NSLOTS;
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView toolbarClicked:]");
 
-  if (!emacs_event)
-    return self;
+  EVENT_INIT (emacs_event);
 
   theEvent = [[self window] currentEvent];
-  emacs_event->kind = TOOL_BAR_EVENT;
+  emacs_event.kind = TOOL_BAR_EVENT;
+  XSETFRAME (emacs_event.arg, emacsframe);
+  EV_TRAILER (theEvent);
+
+  emacs_event.kind = TOOL_BAR_EVENT;
   /* XSETINT (emacs_event->code, 0); */
-  emacs_event->arg = AREF (emacsframe->tool_bar_items,
+  emacs_event.arg = AREF (emacsframe->tool_bar_items,
 			   idx + TOOL_BAR_ITEM_KEY);
-  emacs_event->modifiers = EV_MODIFIERS (theEvent);
+  emacs_event.modifiers = EV_MODIFIERS (theEvent);
   EV_TRAILER (theEvent);
   return self;
 }
@@ -8540,13 +8115,14 @@ not_in_argv (NSString *arg)
 
 - (instancetype)toggleToolbar: (id)sender
 {
+  struct input_event emacs_event;
+
   NSTRACE ("[EmacsView toggleToolbar:]");
 
-  if (!emacs_event)
-    return self;
+  EVENT_INIT (emacs_event);
 
-  emacs_event->kind = NS_NONKEY_EVENT;
-  emacs_event->code = KEY_NS_TOGGLE_TOOLBAR;
+  emacs_event.kind = NS_NONKEY_EVENT;
+  emacs_event.code = KEY_NS_TOGGLE_TOOLBAR;
   EV_TRAILER ((id)nil);
   return self;
 }
@@ -8722,11 +8298,12 @@ not_in_argv (NSString *arg)
   Lisp_Object operations = Qnil;
   Lisp_Object strings = Qnil;
   Lisp_Object type_sym;
+  int modifiers = 0;
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsView performDragOperation:]");
 
-  if (!emacs_event)
-    return NO;
+  EVENT_INIT (emacs_event);
 
   position = [self convertPoint: [sender draggingLocation] fromView: nil];
   x = lrint (position.x);  y = lrint (position.y);
@@ -8794,14 +8371,14 @@ not_in_argv (NSString *arg)
       return NO;
     }
 
-  emacs_event->kind = DRAG_N_DROP_EVENT;
-  XSETINT (emacs_event->x, x);
-  XSETINT (emacs_event->y, y);
-  emacs_event->modifiers = 0;
+  emacs_event.kind = DRAG_N_DROP_EVENT;
+  XSETINT (emacs_event.x, x);
+  XSETINT (emacs_event.y, y);
+  emacs_event.modifiers = 0;
 
-  emacs_event->arg = Fcons (type_sym,
-                            Fcons (operations,
-                                   strings));
+  emacs_event.arg = Fcons (type_sym,
+                           Fcons (operations,
+                                  strings));
   EV_TRAILER (theEvent);
 
   return YES;
@@ -9427,46 +9004,38 @@ not_in_argv (NSString *arg)
   return self;
 }
 
-/* Set up emacs_event.  */
 - (void) sendScrollEventAtLoc: (float)loc fromEvent: (NSEvent *)e
 {
   Lisp_Object win;
+  struct input_event emacs_event;
 
   NSTRACE ("[EmacsScroller sendScrollEventAtLoc:fromEvent:]");
 
-  if (!emacs_event)
-    return;
+  EVENT_INIT (emacs_event);
 
-  emacs_event->part = last_hit_part;
-  emacs_event->code = 0;
-  emacs_event->modifiers = EV_MODIFIERS (e) | down_modifier;
+  emacs_event.part = last_hit_part;
+  emacs_event.code = 0;
+  emacs_event.modifiers = EV_MODIFIERS (e) | down_modifier;
   XSETWINDOW (win, window);
-  emacs_event->frame_or_window = win;
-  emacs_event->timestamp = EV_TIMESTAMP (e);
-  emacs_event->arg = Qnil;
+  emacs_event.arg = Qnil;
 
   if (horizontal)
     {
-      emacs_event->kind = HORIZONTAL_SCROLL_BAR_CLICK_EVENT;
-      XSETINT (emacs_event->x, em_whole * loc / pixel_length);
-      XSETINT (emacs_event->y, em_whole);
+      emacs_event.kind = HORIZONTAL_SCROLL_BAR_CLICK_EVENT;
+      XSETINT (emacs_event.x, em_whole * loc / pixel_length);
+      XSETINT (emacs_event.y, em_whole);
     }
   else
     {
-      emacs_event->kind = SCROLL_BAR_CLICK_EVENT;
-      XSETINT (emacs_event->x, loc);
-      XSETINT (emacs_event->y, pixel_length-20);
+      emacs_event.kind = SCROLL_BAR_CLICK_EVENT;
+      XSETINT (emacs_event.x, loc);
+      XSETINT (emacs_event.y, pixel_length-20);
     }
 
-  if (q_event_ptr)
-    {
-      n_emacs_events_pending++;
-      kbd_buffer_store_event_hold (emacs_event, q_event_ptr);
-    }
-  else
-    hold_event (emacs_event);
-  EVENT_INIT (*emacs_event);
-  ns_send_appdefined (-1);
+  [emacsMainThread sendEmacsEvent:&emacs_event
+                          NSEvent:e
+                    frameOrWindow:win];
+
 }
 
 
@@ -9698,6 +9267,85 @@ not_in_argv (NSString *arg)
 @end  /* EmacsScroller */
 
 
+/* ==========================================================================
+
+    EmacsThread implementation
+
+   ========================================================================== */
+
+/* EmacsThread extends NSThread and provides a few convenience methods
+   for passing events and such like.  */
+
+@implementation EmacsThread
+
+- (instancetype) initWithArgc: (int)argc Argv: (char **)argv
+{
+  NSMethodSignature *lispSignature;
+  NSInvocation *lispInvocation;
+
+  lispSignature = [NSApp methodSignatureForSelector:@selector(initLispThread:withArgv:)];
+  lispInvocation = [NSInvocation invocationWithMethodSignature:lispSignature];
+  [lispInvocation setTarget:NSApp];
+  [lispInvocation setSelector:@selector(initLispThread:withArgv:)];
+  [lispInvocation setArgument:&argc atIndex:2];
+  [lispInvocation setArgument:&argv atIndex:3];
+
+  return [self initWithTarget:lispInvocation
+                     selector:@selector (invoke)
+                       object:nil];
+}
+
+
+/* Put the input_event held in data into the emacs event queue.
+
+   This method should be run in the Emacs Main Lisp thread, so never
+   call it directly, only from sendEmacsEvent.  */
+- (void) processEmacsEvent: (NSData *)data
+{
+  struct input_event *event;
+  Lisp_Object tem = Vinhibit_quit;
+
+  NSTRACE ("[EmacsThread processEmacsEvent:]");
+
+  event = (struct input_event *)[data bytes];
+
+  Vinhibit_quit = Qt;
+  n_emacs_events_pending++;
+  kbd_buffer_store_event_hold (event, q_event_ptr);
+  Vinhibit_quit = tem;
+}
+
+/* Send an input_event to the Emacs main thread.  */
+- (void) sendEmacsEvent: (struct input_event *)emacs_event
+                NSEvent: (NSEvent *)e
+          frameOrWindow: (void *)frame_or_window
+{
+  NSData *event;
+
+  NSTRACE ("[EmacsThread sendEmacsEvent:]");
+
+  XSETFRAME (emacs_event->frame_or_window, frame_or_window);
+
+  if (e)
+    emacs_event->timestamp = EV_TIMESTAMP (e);
+
+  /* Package the input_event inside an NSData object so we can pass it
+     to the lisp thread using performSelector.  performSelector
+     doesn't handle complex C types. Even using an NSInvocation to
+     package it up fails.  */
+  event = [NSData dataWithBytes:emacs_event
+                         length:sizeof(struct input_event)];
+
+  [emacsMainThread performSelector:@selector(processEmacsEvent:)
+                          onThread:emacsMainThread
+                        withObject:event
+                     waitUntilDone:NO];
+
+  raise (SIGIO);
+}
+
+@end /* EmacsThread */
+
 #ifdef NS_IMPL_GNUSTEP
 /* Dummy class to get rid of startup warnings.  */
 @implementation EmacsDocument
@@ -9822,6 +9470,23 @@ ns_xlfd_to_fontname (const char *xlfd)
   ret = [[NSString stringWithUTF8String: name] UTF8String];
   xfree (name);
   return ret;
+}
+
+
+int
+main (int argc, char **argv)
+{
+  // if (! initialized)
+  //   return emacs_main(argc, argv);
+
+  [EmacsApp sharedApplication];
+  [NSApp setDelegate: NSApp];
+
+  /* Start the Lisp thread.  */
+  emacsMainThread = [[EmacsThread alloc] initWithArgc:argc Argv:argv];
+  [emacsMainThread start];
+
+  [NSApp run];
 }
 
 

@@ -175,13 +175,6 @@ sys_cond_broadcast (sys_cond_t *cond)
 {
   int error = pthread_cond_broadcast (cond);
   eassert (error == 0);
-#ifdef HAVE_NS
-  /* Send an app defined event to break out of the NS run loop.
-     It seems that if ns_select is running the NS run loop, this
-     broadcast has no effect until the loop is done, breaking a couple
-     of tests in thread-tests.el. */
-  ns_run_loop_break ();
-#endif
 }
 
 void
