@@ -1360,7 +1360,7 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame,
 
   f->output_data.ns->in_animation = NO;
 
-  [[EmacsView alloc] initFrameFromEmacs: f];
+  f->output_data.ns->frame = [[EmacsFrame alloc] initWithEmacsframe:f];
 
   ns_icon (f, parms);
 

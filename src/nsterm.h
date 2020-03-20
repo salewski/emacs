@@ -499,8 +499,6 @@ typedef id instancetype;
 {
   NSPoint grabOffset;
 }
-
-- (void)setAppearance;
 @end
 
 
@@ -509,6 +507,34 @@ typedef id instancetype;
 {
 }
 @end
+
+
+@interface EmacsFrame : NSObject
+{
+  EmacsView *view;
+  struct frame *emacsFrame;
+}
+
+- (id)initWithEmacsframe:(struct frame *)f;
+- (EmacsView *)view;
+- (NSWindow *)window;
+- (void)close;
+- (void)raiseWithFocus:(BOOL)focus;
+- (void)lower;
+- (void)makeVisible;
+- (void)makeInvisible;
+- (void)iconify;
+- (void)setDecorated:(BOOL)decorated;
+- (void)setParentFrame:(EmacsFrame *)parentFrame;
+- (void)setZGroup:(NSWindowLevel)level;
+- (void)setAppearance;
+- (void)setTransparentTitlebar:(BOOL)transparent;
+- (void)setFrameAlpha:(CGFloat)alpha;
+- (int)titlebarHeight;
+- (int)toolbarHeight;
+- (void)setNeedsDisplay:(BOOL)display;
+@end
+
 
 /* ==========================================================================
 
@@ -933,14 +959,14 @@ extern struct ns_display_info *x_display_list;
 struct ns_output
 {
 #ifdef __OBJC__
-  EmacsView *view;
+  EmacsFrame *frame;
   id miniimage;
   NSColor *cursor_color;
   NSColor *foreground_color;
   NSColor *background_color;
   EmacsToolbar *toolbar;
 #else
-  void *view;
+  void *frame;
   void *miniimage;
   void *cursor_color;
   void *foreground_color;
@@ -1023,7 +1049,8 @@ struct x_output
 
 #define FRAME_DEFAULT_FACE(f) FACE_FROM_ID_OR_NULL (f, DEFAULT_FACE_ID)
 
-#define FRAME_NS_VIEW(f) ((f)->output_data.ns->view)
+#define FRAME_NS_FRAME(f) ((f)->output_data.ns->frame)
+#define FRAME_NS_VIEW(f) ([(f)->output_data.ns->frame view])
 #define FRAME_CURSOR_COLOR(f) ((f)->output_data.ns->cursor_color)
 #define FRAME_POINTER_TYPE(f) ((f)->output_data.ns->current_pointer)
 
@@ -1036,23 +1063,10 @@ struct x_output
 #endif
 
 /* Compute pixel height of the frame's titlebar.  */
-#define FRAME_NS_TITLEBAR_HEIGHT(f)                                     \
-  (NSHeight([FRAME_NS_VIEW (f) frame]) == 0 ?                           \
-   0                                                                    \
-   : (int)(NSHeight([FRAME_NS_VIEW (f) window].frame)                   \
-           - NSHeight([NSWindow contentRectForFrameRect:                \
-                       [[FRAME_NS_VIEW (f) window] frame]               \
-                       styleMask:[[FRAME_NS_VIEW (f) window] styleMask]])))
+#define FRAME_NS_TITLEBAR_HEIGHT(f) ([FRAME_NS_FRAME (f) titlebarHeight])
 
 /* Compute pixel height of the toolbar.  */
-#define FRAME_TOOLBAR_HEIGHT(f)                                         \
-  (([[FRAME_NS_VIEW (f) window] toolbar] == nil                         \
-    || ! [[FRAME_NS_VIEW (f) window] toolbar].isVisible) ?		\
-   0                                                                    \
-   : (int)(NSHeight([NSWindow contentRectForFrameRect:                  \
-                     [[FRAME_NS_VIEW (f) window] frame]                 \
-                     styleMask:[[FRAME_NS_VIEW (f) window] styleMask]]) \
-           - NSHeight([[[FRAME_NS_VIEW (f) window] contentView] frame])))
+#define FRAME_TOOLBAR_HEIGHT(f) ([FRAME_NS_FRAME (f) toolbarHeight])
 
 /* Compute pixel size for vertical scroll bars.  */
 #define NS_SCROLL_BAR_WIDTH(f)						\

@@ -1141,7 +1141,7 @@ ns_update_end (struct frame *f)
 
 #ifdef NS_DRAW_TO_BUFFER
   [NSGraphicsContext setCurrentContext:nil];
-  [view setNeedsDisplay:YES];
+  [FRAME_NS_FRAME (f) setNeedsDisplay:YES];
 #else
   block_input ();
 
@@ -1220,7 +1220,7 @@ ns_unfocus (struct frame *f)
     }
 
 #ifdef NS_DRAW_TO_BUFFER
-  [FRAME_NS_VIEW (f) setNeedsDisplay:YES];
+  [FRAME_NS_FRAME (f) setNeedsDisplay:YES];
 #else
   if (f != ns_updating_frame)
     {
@@ -1447,11 +1447,8 @@ ns_focus_frame (struct frame *f, bool noactivate)
 
   if (dpyinfo->ns_focus_frame != f)
     {
-      EmacsView *view = FRAME_NS_VIEW (f);
-      block_input ();
-      [NSApp activateIgnoringOtherApps: YES];
-      [[view window] makeKeyAndOrderFront: view];
-      unblock_input ();
+      [NSApp activateIgnoringOtherApps:YES];
+      [FRAME_NS_FRAME (f) raiseWithFocus:YES];
     }
 }
 
@@ -1461,19 +1458,8 @@ ns_raise_frame (struct frame *f, BOOL make_key)
      Bring window to foreground and if make_key is YES, give it focus.
    -------------------------------------------------------------------------- */
 {
-  NSView *view;
-
   check_window_system (f);
-  view = FRAME_NS_VIEW (f);
-  block_input ();
-  if (FRAME_VISIBLE_P (f))
-    {
-      if (make_key)
-        [[view window] makeKeyAndOrderFront: NSApp];
-      else
-        [[view window] orderFront: NSApp];
-    }
-  unblock_input ();
+  [FRAME_NS_FRAME (f) raiseWithFocus:make_key];
 }
 
 
@@ -1483,13 +1469,8 @@ ns_lower_frame (struct frame *f)
      Send window to back
    -------------------------------------------------------------------------- */
 {
-  NSView *view;
-
   check_window_system (f);
-  view = FRAME_NS_VIEW (f);
-  block_input ();
-  [[view window] orderBack: NSApp];
-  unblock_input ();
+  [FRAME_NS_FRAME (f) lower];
 }
 
 
@@ -1563,44 +1544,8 @@ ns_make_frame_visible (struct frame *f)
      if this ends up the case again, comment this out again.  */
   if (!FRAME_VISIBLE_P (f))
     {
-      EmacsView *view = (EmacsView *)FRAME_NS_VIEW (f);
-      NSWindow *window = [view window];
-
       SET_FRAME_VISIBLE (f, 1);
-      ns_raise_frame (f, ! FRAME_NO_FOCUS_ON_MAP (f));
-
-      /* Making a new frame from a fullscreen frame will make the new frame
-         fullscreen also.  So skip handleFS as this will print an error.  */
-      if ([view fsIsNative] && [view isFullscreen])
-        {
-          // maybe it is not necessary to wait
-          [view waitFullScreenTransition];
-          return;
-        }
-
-      if (f->want_fullscreen != FULLSCREEN_NONE)
-        {
-          block_input ();
-          [view handleFS];
-          unblock_input ();
-        }
-
-      /* Making a frame invisible seems to break the parent->child
-         relationship, so reinstate it.  */
-      if ([window parentWindow] == nil && FRAME_PARENT_FRAME (f) != NULL)
-        {
-          NSWindow *parent = [FRAME_NS_VIEW (FRAME_PARENT_FRAME (f)) window];
-
-          block_input ();
-          [parent addChildWindow: window
-                         ordered: NSWindowAbove];
-          unblock_input ();
-
-          /* If the parent frame moved while the child frame was
-             invisible, the child frame's position won't have been
-             updated.  Make sure it's in the right place now.  */
-          ns_set_offset(f, f->left_pos, f->top_pos, 0);
-        }
+      [FRAME_NS_FRAME (f) makeVisible];
     }
 }
 
@@ -1611,11 +1556,9 @@ ns_make_frame_invisible (struct frame *f)
      Hide the window (X11 semantics)
    -------------------------------------------------------------------------- */
 {
-  NSView *view;
   NSTRACE ("ns_make_frame_invisible");
   check_window_system (f);
-  view = FRAME_NS_VIEW (f);
-  [[view window] orderOut: NSApp];
+  [FRAME_NS_FRAME (f) makeInvisible];
   SET_FRAME_VISIBLE (f, 0);
   SET_FRAME_ICONIFIED (f, 0);
 }
@@ -1638,35 +1581,16 @@ ns_iconify_frame (struct frame *f)
      External (hook): Iconify window
    -------------------------------------------------------------------------- */
 {
-  NSView *view;
   struct ns_display_info *dpyinfo;
 
   NSTRACE ("ns_iconify_frame");
   check_window_system (f);
-  view = FRAME_NS_VIEW (f);
   dpyinfo = FRAME_DISPLAY_INFO (f);
 
   if (dpyinfo->highlight_frame == f)
     dpyinfo->highlight_frame = 0;
 
-  if ([[view window] windowNumber] <= 0)
-    {
-      /* The window is still deferred.  Make it very small, bring it
-         on screen and order it out.  */
-      NSRect s = { { 100, 100}, {0, 0} };
-      NSRect t;
-      t = [[view window] frame];
-      [[view window] setFrame: s display: NO];
-      [[view window] orderBack: NSApp];
-      [[view window] orderOut: NSApp];
-      [[view window] setFrame: t display: NO];
-    }
-
-  /* Processing input while Emacs is being minimized can cause a
-     crash, so block it for the duration.  */
-  block_input();
-  [[view window] miniaturize: NSApp];
-  unblock_input();
+  [FRAME_NS_FRAME (f) iconify];
 }
 
 /* Free resources of frame F.  */
@@ -1674,17 +1598,15 @@ ns_iconify_frame (struct frame *f)
 void
 ns_free_frame_resources (struct frame *f)
 {
-  NSView *view;
+  EmacsFrame *frame;
   struct ns_display_info *dpyinfo;
   Mouse_HLInfo *hlinfo;
 
   NSTRACE ("ns_free_frame_resources");
   check_window_system (f);
-  view = FRAME_NS_VIEW (f);
+  frame = FRAME_NS_FRAME (f);
   dpyinfo = FRAME_DISPLAY_INFO (f);
   hlinfo = MOUSE_HL_INFO (f);
-
-  [(EmacsView *)view setWindowClosing: YES]; /* may not have been informed */
 
   block_input ();
 
@@ -1701,8 +1623,8 @@ ns_free_frame_resources (struct frame *f)
   if (f->output_data.ns->miniimage != nil)
     [f->output_data.ns->miniimage release];
 
-  [[view window] close];
-  [view release];
+  [frame close];
+  [frame release];
 
   xfree (f->output_data.ns);
   f->output_data.ns = NULL;
@@ -1717,16 +1639,6 @@ ns_destroy_window (struct frame *f)
    -------------------------------------------------------------------------- */
 {
   NSTRACE ("ns_destroy_window");
-
-  /* If this frame has a parent window, detach it as not doing so can
-     cause a crash in GNUStep.  */
-  if (FRAME_PARENT_FRAME (f) != NULL)
-    {
-      NSWindow *child = [FRAME_NS_VIEW (f) window];
-      NSWindow *parent = [FRAME_NS_VIEW (FRAME_PARENT_FRAME (f)) window];
-
-      [parent removeChildWindow: child];
-    }
 
   check_window_system (f);
   ns_free_frame_resources (f);
@@ -1882,8 +1794,7 @@ ns_set_undecorated (struct frame *f, Lisp_Object new_value, Lisp_Object old_valu
      GNUStep cannot change an existing window's style.
    -------------------------------------------------------------------------- */
 {
-  EmacsView *view = (EmacsView *)FRAME_NS_VIEW (f);
-  NSWindow *window = [view window];
+  EmacsFrame *frame = FRAME_NS_FRAME (f);
 
   NSTRACE ("ns_set_undecorated");
 
@@ -1894,26 +1805,14 @@ ns_set_undecorated (struct frame *f, Lisp_Object new_value, Lisp_Object old_valu
       if (NILP (new_value))
         {
           FRAME_UNDECORATED (f) = false;
-          [window setStyleMask: ((window.styleMask | FRAME_DECORATED_FLAGS)
-                                  ^ FRAME_UNDECORATED_FLAGS)];
-
-          [view createToolbar: f];
+          [frame setDecorated:NO];
         }
       else
         {
-          [window setToolbar: nil];
-          /* Do I need to release the toolbar here?  */
-
           FRAME_UNDECORATED (f) = true;
-          [window setStyleMask: ((window.styleMask | FRAME_UNDECORATED_FLAGS)
-                                 ^ FRAME_DECORATED_FLAGS)];
+          [frame setDecorated:YES];
         }
 
-      /* At this point it seems we don't have an active NSResponder,
-         so some key presses (TAB) are swallowed by the system.  */
-      [window makeFirstResponder: view];
-
-      [view updateFrameSize: NO];
       unblock_input ();
     }
 }
@@ -1944,7 +1843,6 @@ ns_set_parent_frame (struct frame *f, Lisp_Object new_value, Lisp_Object old_val
    -------------------------------------------------------------------------- */
 {
   struct frame *p = NULL;
-  NSWindow *parent, *child;
 
   NSTRACE ("ns_set_parent_frame");
 
@@ -1959,72 +1857,7 @@ ns_set_parent_frame (struct frame *f, Lisp_Object new_value, Lisp_Object old_val
 
   if (p != FRAME_PARENT_FRAME (f))
     {
-      block_input ();
-      child = [FRAME_NS_VIEW (f) window];
-
-#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
-      EmacsView *view = (EmacsView *)FRAME_NS_VIEW (f);
-#endif
-
-      if ([child parentWindow] != nil)
-        {
-#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
-          parent = [child parentWindow];
-#endif
-
-          [[child parentWindow] removeChildWindow:child];
-#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-#if MAC_OS_X_VERSION_MIN_REQUIRED < 101000
-          if ([child respondsToSelector:@selector(setAccessibilitySubrole:)])
-#endif
-              [child setAccessibilitySubrole:NSAccessibilityStandardWindowSubrole];
-#endif
-#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
-          if (NILP (new_value))
-            {
-              NSTRACE ("child setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary");
-              [child setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary];
-              // if current parent in fullscreen and no new parent make child fullscreen
-              while (parent) {
-                if (([parent styleMask] & NSWindowStyleMaskFullScreen) != 0)
-                  {
-                    [view toggleFullScreen:child];
-                    break;
-                  }
-                // check all parents
-                parent = [parent parentWindow];
-              }
-            }
-#endif
-        }
-
-      if (!NILP (new_value))
-        {
-#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
-          // child frame must not be in fullscreen
-          if ([view fsIsNative] && [view isFullscreen])
-            {
-              // in case child is going fullscreen
-              [view waitFullScreenTransition];
-              [view toggleFullScreen:child];
-            }
-          NSTRACE ("child setCollectionBehavior:NSWindowCollectionBehaviorFullScreenAuxiliary");
-          [child setCollectionBehavior:NSWindowCollectionBehaviorFullScreenAuxiliary];
-#endif
-          parent = [FRAME_NS_VIEW (p) window];
-
-          [parent addChildWindow: child
-                         ordered: NSWindowAbove];
-#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-#if MAC_OS_X_VERSION_MIN_REQUIRED < 101000
-          if ([child respondsToSelector:@selector(setAccessibilitySubrole:)])
-#endif
-              [child setAccessibilitySubrole:NSAccessibilityFloatingWindowSubrole];
-#endif
-        }
-
-      unblock_input ();
-
+      [FRAME_NS_FRAME (f) setParentFrame:(NILP (new_value) ? nil : FRAME_NS_FRAME (p))];
       fset_parent_frame (f, new_value);
     }
 }
@@ -2075,30 +1908,29 @@ ns_set_z_group (struct frame *f, Lisp_Object new_value, Lisp_Object old_value)
 
    Some window managers may not honor this parameter.  */
 {
-  EmacsView *view = (EmacsView *)FRAME_NS_VIEW (f);
-  NSWindow *window = [view window];
+  EmacsFrame *frame = FRAME_NS_FRAME (f);
 
   NSTRACE ("ns_set_z_group");
 
   if (NILP (new_value))
     {
-      window.level = NSNormalWindowLevel;
+      [frame setZGroup:NSNormalWindowLevel];
       FRAME_Z_GROUP (f) = z_group_none;
     }
   else if (EQ (new_value, Qabove))
     {
-      window.level = NSNormalWindowLevel + 1;
+      [frame setZGroup:NSNormalWindowLevel + 1];
       FRAME_Z_GROUP (f) = z_group_above;
     }
   else if (EQ (new_value, Qabove_suspended))
     {
       /* Not sure what level this should be.  */
-      window.level = NSNormalWindowLevel + 1;
+      [frame setZGroup:NSNormalWindowLevel + 1];
       FRAME_Z_GROUP (f) = z_group_above_suspended;
     }
   else if (EQ (new_value, Qbelow))
     {
-      window.level = NSNormalWindowLevel - 1;
+      [frame setZGroup:NSNormalWindowLevel - 1];
       FRAME_Z_GROUP (f) = z_group_below;
     }
   else
@@ -2110,9 +1942,6 @@ void
 ns_set_appearance (struct frame *f, Lisp_Object new_value, Lisp_Object old_value)
 {
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-  EmacsView *view = (EmacsView *)FRAME_NS_VIEW (f);
-  EmacsWindow *window = (EmacsWindow *)[view window];
-
   NSTRACE ("ns_set_appearance");
 
 #ifndef NSAppKitVersionNumber10_10
@@ -2129,7 +1958,7 @@ ns_set_appearance (struct frame *f, Lisp_Object new_value, Lisp_Object old_value
   else
     FRAME_NS_APPEARANCE (f) = ns_appearance_system_default;
 
-  [window setAppearance];
+  [FRAME_NS_FRAME (f) setAppearance];
 #endif /* MAC_OS_X_VERSION_MAX_ALLOWED >= 101000 */
 }
 
@@ -2138,15 +1967,11 @@ ns_set_transparent_titlebar (struct frame *f, Lisp_Object new_value,
                              Lisp_Object old_value)
 {
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-  EmacsView *view = (EmacsView *)FRAME_NS_VIEW (f);
-  NSWindow *window = [view window];
-
   NSTRACE ("ns_set_transparent_titlebar");
 
-  if ([window respondsToSelector: @selector(titlebarAppearsTransparent)]
-      && !EQ (new_value, old_value))
+  if (!EQ (new_value, old_value))
     {
-      window.titlebarAppearsTransparent = !NILP (new_value);
+      [FRAME_NS_FRAME (f) setTransparentTitlebar:!NILP (new_value)];
       FRAME_NS_TRANSPARENT_TITLEBAR (f) = !NILP (new_value);
     }
 #endif /* MAC_OS_X_VERSION_MAX_ALLOWED >= 101000 */
@@ -2492,12 +2317,7 @@ ns_set_frame_alpha (struct frame *f)
   else if (0.0 <= alpha && alpha < alpha_min && alpha_min <= 1.0)
     alpha = alpha_min;
 
-#ifdef NS_IMPL_COCOA
-  {
-    EmacsView *view = FRAME_NS_VIEW (f);
-  [[view window] setAlphaValue: alpha];
-  }
-#endif
+  [FRAME_NS_FRAME (f) setFrameAlpha:alpha];
 }
 
 
@@ -5577,6 +5397,319 @@ ns_term_shutdown (int sig)
 
 /* ==========================================================================
 
+   EmacsFrame implementation
+
+   ========================================================================== */
+
+
+@implementation EmacsFrame
+
+- (id)initWithEmacsframe:(struct frame *)f
+{
+  view = [[EmacsView alloc] initFrameFromEmacs:f];
+  emacsFrame = f;
+
+  [self setAppearance];
+
+  return self;
+}
+
+- (void)dealloc
+{
+  [view release];
+  [super dealloc];
+}
+
+- (EmacsView *)view
+{
+  return view;
+}
+
+- (NSWindow *)window
+{
+  return [view window];
+}
+
+- (void)close
+{
+  /* If this frame has a parent window, detach it as not doing so can
+     cause a crash in GNUStep.  */
+  if (FRAME_PARENT_FRAME (emacsFrame) != NULL)
+    {
+      NSWindow *child = [view window];
+      NSWindow *parent = [FRAME_NS_VIEW (FRAME_PARENT_FRAME (emacsFrame)) window];
+
+      [parent removeChildWindow: child];
+    }
+
+  [view setWindowClosing:YES];
+  [[view window] close];
+}
+
+- (void)raiseWithFocus:(BOOL)focus
+{
+  block_input ();
+  if (focus)
+    [[view window] makeKeyAndOrderFront:NSApp];
+  else
+    [[view window] orderFront:NSApp];
+  unblock_input ();
+}
+
+- (void)lower
+{
+  block_input ();
+  [[view window] orderBack:NSApp];
+  unblock_input ();
+}
+
+- (void)makeVisible
+{
+  NSWindow *window = [view window];
+
+  [self raiseWithFocus:(! FRAME_NO_FOCUS_ON_MAP (emacsFrame))];
+
+  /* Making a new frame from a fullscreen frame will make the new frame
+     fullscreen also.  So skip handleFS as this will print an error.  */
+  if ([view fsIsNative] && [view isFullscreen])
+    {
+      // maybe it is not necessary to wait
+      [view waitFullScreenTransition];
+      return;
+    }
+
+  if (emacsFrame->want_fullscreen != FULLSCREEN_NONE)
+    {
+      block_input ();
+      [view handleFS];
+      unblock_input ();
+    }
+
+  /* Making a frame invisible seems to break the parent->child
+     relationship, so reinstate it.  */
+  if ([window parentWindow] == nil && FRAME_PARENT_FRAME (emacsFrame) != NULL)
+    {
+      NSWindow *parent = [FRAME_NS_VIEW (FRAME_PARENT_FRAME (emacsFrame)) window];
+
+      block_input ();
+      [parent addChildWindow:window
+                     ordered:NSWindowAbove];
+      unblock_input ();
+
+      /* If the parent frame moved while the child frame was
+         invisible, the child frame's position won't have been
+         updated.  Make sure it's in the right place now.  */
+      ns_set_offset(emacsFrame, emacsFrame->left_pos, emacsFrame->top_pos, 0);
+    }
+}
+
+- (void)makeInvisible
+{
+  [[view window] orderOut:NSApp];
+}
+
+- (void)iconify
+{
+  if ([[view window] windowNumber] <= 0)
+    {
+      /* The window is still deferred.  Make it very small, bring it
+         on screen and order it out.  */
+      NSRect s = { { 100, 100}, {0, 0} };
+      NSRect t;
+      t = [[view window] frame];
+      [[view window] setFrame:s display:NO];
+      [[view window] orderBack:NSApp];
+      [[view window] orderOut:NSApp];
+      [[view window] setFrame:t display:NO];
+    }
+
+  /* Processing input while Emacs is being minimized can cause a
+     crash, so block it for the duration.  */
+  block_input();
+  [[view window] miniaturize:NSApp];
+  unblock_input();
+}
+
+- (void)setDecorated:(BOOL)decorated
+{
+  NSWindow *window = [view window];
+
+  /* FIXME: We should completely replace the window rather than just
+     changing the style mask.  macOS is happy enough changing the
+     style of the window, but GNUstep isn't.  */
+
+  if (decorated)
+    {
+      [window setToolbar: nil];
+      /* Do I need to release the toolbar here?  */
+
+      [window setStyleMask: ((window.styleMask | FRAME_UNDECORATED_FLAGS)
+                             ^ FRAME_DECORATED_FLAGS)];
+    }
+  else
+    {
+      [window setStyleMask:((window.styleMask | FRAME_DECORATED_FLAGS)
+                            ^ FRAME_UNDECORATED_FLAGS)];
+      [view createToolbar:emacsFrame];
+    }
+
+  /* At this point it seems we don't have an active NSResponder,
+     so some key presses (TAB) are swallowed by the system.  */
+  [window makeFirstResponder:view];
+
+  [view updateFrameSize:NO];
+}
+
+- (void)setParentFrame:(EmacsFrame *)parentFrame
+{
+  NSWindow *parent = [parentFrame window];
+  NSWindow *child = [view window];
+
+  block_input ();
+
+  if ([child parentWindow] != nil)
+    {
+      [[child parentWindow] removeChildWindow:child];
+#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
+#if MAC_OS_X_VERSION_MIN_REQUIRED < 101000
+      if ([child respondsToSelector:@selector(setAccessibilitySubrole:)])
+#endif
+        [child setAccessibilitySubrole:NSAccessibilityStandardWindowSubrole];
+#endif
+#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
+      if (! parent)
+        {
+          NSTRACE ("child setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary");
+          [child setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary];
+
+          /* If current parent in fullscreen and no new parent make
+             child fullscreen.  */
+          NSWindow *curParent = [child parentWindow];
+          while (curParent) {
+            if (([curParent styleMask] & NSWindowStyleMaskFullScreen) != 0)
+              {
+                [view toggleFullScreen:child];
+                break;
+              }
+            /* Check all parents.  */
+            curParent = [curParent parentWindow];
+          }
+        }
+#endif
+    }
+
+  if (parent)
+    {
+#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
+      /* Child frame must not be in fullscreen.  */
+      if ([view fsIsNative] && [view isFullscreen])
+        {
+          /* In case child is going fullscreen.  */
+          [view waitFullScreenTransition];
+          [view toggleFullScreen:child];
+        }
+
+      NSTRACE ("child setCollectionBehavior:NSWindowCollectionBehaviorFullScreenAuxiliary");
+      [child setCollectionBehavior:NSWindowCollectionBehaviorFullScreenAuxiliary];
+#endif
+
+      [parent addChildWindow:child
+                     ordered:NSWindowAbove];
+#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
+#if MAC_OS_X_VERSION_MIN_REQUIRED < 101000
+      if ([child respondsToSelector:@selector(setAccessibilitySubrole:)])
+#endif
+        [child setAccessibilitySubrole:NSAccessibilityFloatingWindowSubrole];
+#endif
+    }
+
+  unblock_input ();
+}
+
+- (void)setZGroup:(NSWindowLevel)level
+{
+  [[view window] setLevel:level];
+}
+
+- (void)setAppearance
+{
+#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
+  NSAppearance *appearance = nil;
+
+  NSTRACE ("[EmacsFrame setAppearance]");
+
+#ifndef NSAppKitVersionNumber10_10
+#define NSAppKitVersionNumber10_10 1343
+#endif
+
+  if (NSAppKitVersionNumber < NSAppKitVersionNumber10_10)
+    return;
+
+  if (FRAME_NS_APPEARANCE (emacsFrame) == ns_appearance_vibrant_dark)
+    appearance =
+      [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
+  else if (FRAME_NS_APPEARANCE (emacsFrame) == ns_appearance_aqua)
+    appearance =
+      [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+
+  [[view window] setAppearance:appearance];
+#endif /* MAC_OS_X_VERSION_MAX_ALLOWED >= 101000 */
+}
+
+- (void)setTransparentTitlebar:(BOOL)transparent
+{
+  if ([[view window] respondsToSelector:@selector(titlebarAppearsTransparent)])
+    [[view window] setTitlebarAppearsTransparent:transparent];
+}
+
+- (void)setFrameAlpha:(CGFloat)alpha
+{
+#ifdef NS_IMPL_COCOA
+  [[view window] setAlphaValue:alpha];
+#endif
+}
+
+- (int)titlebarHeight
+{
+  NSWindow *window;
+  NSRect contentRect;
+  NSRect windowRect;
+
+  if (NSHeight([view frame]) == 0)
+    return 0;
+
+  window = [view window];
+  contentRect = [NSWindow contentRectForFrameRect:[window frame] styleMask:[window styleMask]];
+  windowRect = [window frame];
+
+  return NSHeight (windowRect) - NSHeight (contentRect);
+}
+
+- (int)toolbarHeight
+{
+  NSWindow *window = [view window];
+  NSRect contentRect;
+  NSRect contentViewRect;
+
+  if ([window toolbar] == nil || ! [[window toolbar] isVisible])
+    return 0;
+
+  contentRect = [NSWindow contentRectForFrameRect:[window frame] styleMask:[window styleMask]];
+  contentViewRect = [[window contentView] frame];
+
+  return NSHeight (contentRect) - NSHeight (contentViewRect);
+}
+
+- (void)setNeedsDisplay:(BOOL)display
+{
+  [view setNeedsDisplay:display];
+}
+
+@end
+
+
+/* ==========================================================================
+
     EmacsApp implementation
 
    ========================================================================== */
@@ -7387,8 +7520,7 @@ not_in_argv (NSString *arg)
 
 - (void)createToolbar: (struct frame *)f
 {
-  EmacsView *view = (EmacsView *)FRAME_NS_VIEW (f);
-  NSWindow *window = [view window];
+  NSWindow *window = [self window];
 
   toolbar = [[EmacsToolbar alloc] initForView: self withIdentifier:
                    [NSString stringWithFormat: @"Emacs Frame %d",
@@ -7448,15 +7580,10 @@ not_in_argv (NSString *arg)
   [self initWithFrame: r];
   [self setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
 
-  FRAME_NS_VIEW (f) = self;
   emacsframe = f;
 #ifdef NS_IMPL_COCOA
   old_title = 0;
   maximizing_resize = NO;
-#endif
-
-#ifdef NS_DRAW_TO_BUFFER
-  [self createDrawingBuffer];
 #endif
 
   win = [[EmacsWindow alloc]
@@ -7502,9 +7629,6 @@ not_in_argv (NSString *arg)
   /* toolbar support */
   if (! FRAME_UNDECORATED (f))
     [self createToolbar: f];
-
-
-  [win setAppearance];
 
 #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
   if ([win respondsToSelector: @selector(titlebarAppearsTransparent)])
@@ -7573,6 +7697,10 @@ not_in_argv (NSString *arg)
   if ([win respondsToSelector: @selector(setTabbingMode:)])
 #endif
     [win setTabbingMode: NSWindowTabbingModeDisallowed];
+#endif
+
+#ifdef NS_DRAW_TO_BUFFER
+  [self createDrawingBuffer];
 #endif
 
   ns_window_num++;
@@ -8878,32 +9006,6 @@ not_in_argv (NSString *arg)
       [self setFrame: sr display: NO];
     }
 #endif
-}
-
-- (void)setAppearance
-{
-#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-  struct frame *f = ((EmacsView *)[self delegate])->emacsframe;
-  NSAppearance *appearance = nil;
-
-  NSTRACE ("[EmacsWindow setAppearance]");
-
-#ifndef NSAppKitVersionNumber10_10
-#define NSAppKitVersionNumber10_10 1343
-#endif
-
-  if (NSAppKitVersionNumber < NSAppKitVersionNumber10_10)
-    return;
-
-  if (FRAME_NS_APPEARANCE (f) == ns_appearance_vibrant_dark)
-    appearance =
-      [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
-  else if (FRAME_NS_APPEARANCE (f) == ns_appearance_aqua)
-    appearance =
-      [NSAppearance appearanceNamed:NSAppearanceNameAqua];
-
-  [self setAppearance:appearance];
-#endif /* MAC_OS_X_VERSION_MAX_ALLOWED >= 101000 */
 }
 
 - (void)setFrame:(NSRect)windowFrame
