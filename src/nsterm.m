@@ -1141,7 +1141,7 @@ ns_update_end (struct frame *f)
 
 #ifdef NS_DRAW_TO_BUFFER
   [NSGraphicsContext setCurrentContext:nil];
-  [FRAME_NS_FRAME (f) setNeedsDisplay:YES];
+  [FRAME_NS_FRAME_PROXY (f) setNeedsDisplay:YES];
 #else
   block_input ();
 
@@ -1220,7 +1220,7 @@ ns_unfocus (struct frame *f)
     }
 
 #ifdef NS_DRAW_TO_BUFFER
-  [FRAME_NS_FRAME (f) setNeedsDisplay:YES];
+  [FRAME_NS_FRAME_PROXY (f) setNeedsDisplay:YES];
 #else
   if (f != ns_updating_frame)
     {
@@ -1448,7 +1448,7 @@ ns_focus_frame (struct frame *f, bool noactivate)
   if (dpyinfo->ns_focus_frame != f)
     {
       [NSApp activateIgnoringOtherApps:YES];
-      [FRAME_NS_FRAME (f) raiseWithFocus:YES];
+      [FRAME_NS_FRAME_PROXY (f) raiseWithFocus:YES];
     }
 }
 
@@ -1459,7 +1459,7 @@ ns_raise_frame (struct frame *f, BOOL make_key)
    -------------------------------------------------------------------------- */
 {
   check_window_system (f);
-  [FRAME_NS_FRAME (f) raiseWithFocus:make_key];
+  [FRAME_NS_FRAME_PROXY (f) raiseWithFocus:make_key];
 }
 
 
@@ -1470,7 +1470,7 @@ ns_lower_frame (struct frame *f)
    -------------------------------------------------------------------------- */
 {
   check_window_system (f);
-  [FRAME_NS_FRAME (f) lower];
+  [FRAME_NS_FRAME_PROXY (f) lower];
 }
 
 
@@ -1545,7 +1545,7 @@ ns_make_frame_visible (struct frame *f)
   if (!FRAME_VISIBLE_P (f))
     {
       SET_FRAME_VISIBLE (f, 1);
-      [FRAME_NS_FRAME (f) makeVisible];
+      [FRAME_NS_FRAME_PROXY (f) makeVisible];
     }
 }
 
@@ -1558,7 +1558,7 @@ ns_make_frame_invisible (struct frame *f)
 {
   NSTRACE ("ns_make_frame_invisible");
   check_window_system (f);
-  [FRAME_NS_FRAME (f) makeInvisible];
+  [FRAME_NS_FRAME_PROXY (f) makeInvisible];
   SET_FRAME_VISIBLE (f, 0);
   SET_FRAME_ICONIFIED (f, 0);
 }
@@ -1590,7 +1590,7 @@ ns_iconify_frame (struct frame *f)
   if (dpyinfo->highlight_frame == f)
     dpyinfo->highlight_frame = 0;
 
-  [FRAME_NS_FRAME (f) iconify];
+  [FRAME_NS_FRAME_PROXY (f) iconify];
 }
 
 /* Free resources of frame F.  */
@@ -1794,7 +1794,7 @@ ns_set_undecorated (struct frame *f, Lisp_Object new_value, Lisp_Object old_valu
      GNUStep cannot change an existing window's style.
    -------------------------------------------------------------------------- */
 {
-  EmacsFrame *frame = FRAME_NS_FRAME (f);
+  EmacsFrame *frame = FRAME_NS_FRAME_PROXY (f);
 
   NSTRACE ("ns_set_undecorated");
 
@@ -1857,7 +1857,7 @@ ns_set_parent_frame (struct frame *f, Lisp_Object new_value, Lisp_Object old_val
 
   if (p != FRAME_PARENT_FRAME (f))
     {
-      [FRAME_NS_FRAME (f) setParentFrame:(NILP (new_value) ? nil : FRAME_NS_FRAME (p))];
+      [FRAME_NS_FRAME_PROXY (f) setParentFrame:(NILP (new_value) ? nil : FRAME_NS_FRAME (p))];
       fset_parent_frame (f, new_value);
     }
 }
@@ -1908,7 +1908,7 @@ ns_set_z_group (struct frame *f, Lisp_Object new_value, Lisp_Object old_value)
 
    Some window managers may not honor this parameter.  */
 {
-  EmacsFrame *frame = FRAME_NS_FRAME (f);
+  EmacsFrame *frame = FRAME_NS_FRAME_PROXY (f);
 
   NSTRACE ("ns_set_z_group");
 
@@ -1958,7 +1958,7 @@ ns_set_appearance (struct frame *f, Lisp_Object new_value, Lisp_Object old_value
   else
     FRAME_NS_APPEARANCE (f) = ns_appearance_system_default;
 
-  [FRAME_NS_FRAME (f) setAppearance];
+  [FRAME_NS_FRAME_PROXY (f) setAppearance];
 #endif /* MAC_OS_X_VERSION_MAX_ALLOWED >= 101000 */
 }
 
@@ -1971,7 +1971,7 @@ ns_set_transparent_titlebar (struct frame *f, Lisp_Object new_value,
 
   if (!EQ (new_value, old_value))
     {
-      [FRAME_NS_FRAME (f) setTransparentTitlebar:!NILP (new_value)];
+      [FRAME_NS_FRAME_PROXY (f) setTransparentTitlebar:!NILP (new_value)];
       FRAME_NS_TRANSPARENT_TITLEBAR (f) = !NILP (new_value);
     }
 #endif /* MAC_OS_X_VERSION_MAX_ALLOWED >= 101000 */
@@ -2317,7 +2317,7 @@ ns_set_frame_alpha (struct frame *f)
   else if (0.0 <= alpha && alpha < alpha_min && alpha_min <= 1.0)
     alpha = alpha_min;
 
-  [FRAME_NS_FRAME (f) setFrameAlpha:alpha];
+  [FRAME_NS_FRAME_PROXY (f) setFrameAlpha:alpha];
 }
 
 
@@ -5393,6 +5393,56 @@ ns_term_shutdown (int sig)
       emacs_abort ();
     }
 }
+
+
+/* ==========================================================================
+
+    MainThreadProxy implementation
+
+   ========================================================================== */
+
+/* MainThreadProxy allows us to send messages to the main thread from
+   subthreads without having to mess around with building
+   NSInvocations: ObjC does it all for us.  */
+
+@implementation MainThreadProxy
+
+- (instancetype) initWithObject: (NSObject *)object
+                  waitUntilDone: (BOOL)wait
+{
+  if (object == nil)
+    {
+      [self release];
+      return nil;
+    }
+
+  targetObject = object;
+  waitUntilDone = wait;
+  return self;
+}
+
+- (NSMethodSignature *) methodSignatureForSelector: (SEL)selector
+{
+  return [targetObject methodSignatureForSelector:selector];
+}
+
+- (void) forwardInvocation: (NSInvocation *)invocation
+{
+  if ([NSThread isMainThread])
+    {
+      [invocation setTarget:targetObject];
+      [invocation invoke];
+    }
+  else
+    {
+      [invocation retainArguments];
+      [invocation performSelectorOnMainThread:@selector(invoke)
+                                   withObject:nil
+                                waitUntilDone:waitUntilDone];
+    }
+}
+
+@end
 
 
 /* ==========================================================================

@@ -509,6 +509,15 @@ typedef id instancetype;
 @end
 
 
+@interface MainThreadProxy: NSProxy
+{
+  id targetObject;
+  BOOL waitUntilDone;
+}
+- (instancetype) initWithObject:(NSObject *)object waitUntilDone:(BOOL)wait;
+@end
+
+
 @interface EmacsFrame : NSObject
 {
   EmacsView *view;
@@ -1050,6 +1059,21 @@ struct x_output
 #define FRAME_DEFAULT_FACE(f) FACE_FROM_ID_OR_NULL (f, DEFAULT_FACE_ID)
 
 #define FRAME_NS_FRAME(f) ((f)->output_data.ns->frame)
+
+/* This doesn't wait for the method to complete on the main thread
+   before returning, so you can't get a return value.  */
+#define FRAME_NS_FRAME_PROXY(f)                                         \
+  (EmacsFrame *)[[[MainThreadProxy alloc]                               \
+                  initWithObject:FRAME_NS_FRAME (f)                     \
+                  waitUntilDone:NO] autorelease]
+
+/* Use this one when you expect a return value or you need to wait for
+   the method to complete on the main thread.  */
+#define FRAME_NS_FRAME_PROXY_WAIT(f)                                    \
+  (EmacsFrame *)[[[MainThreadProxy alloc]                               \
+                  initWithObject:FRAME_NS_FRAME (f)                     \
+                  waitUntilDone:YES] autorelease]
+
 #define FRAME_NS_VIEW(f) ([(f)->output_data.ns->frame view])
 #define FRAME_CURSOR_COLOR(f) ((f)->output_data.ns->cursor_color)
 #define FRAME_POINTER_TYPE(f) ((f)->output_data.ns->current_pointer)
@@ -1063,10 +1087,12 @@ struct x_output
 #endif
 
 /* Compute pixel height of the frame's titlebar.  */
-#define FRAME_NS_TITLEBAR_HEIGHT(f) ([FRAME_NS_FRAME (f) titlebarHeight])
+#define FRAME_NS_TITLEBAR_HEIGHT(f)                     \
+  ([FRAME_NS_FRAME_PROXY_WAIT (f) titlebarHeight])
 
 /* Compute pixel height of the toolbar.  */
-#define FRAME_TOOLBAR_HEIGHT(f) ([FRAME_NS_FRAME (f) toolbarHeight])
+#define FRAME_TOOLBAR_HEIGHT(f)                 \
+  ([FRAME_NS_FRAME_PROXY_WAIT (f) toolbarHeight])
 
 /* Compute pixel size for vertical scroll bars.  */
 #define NS_SCROLL_BAR_WIDTH(f)						\
