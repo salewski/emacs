@@ -528,6 +528,7 @@ typedef id instancetype;
 - (EmacsView *)view;
 - (NSWindow *)window;
 - (void)close;
+- (void)focus;
 - (void)raiseWithFocus:(BOOL)focus;
 - (void)lower;
 - (void)makeVisible;
@@ -542,6 +543,16 @@ typedef id instancetype;
 - (int)titlebarHeight;
 - (int)toolbarHeight;
 - (void)setNeedsDisplay:(BOOL)display;
+- (void)setBackgroundColor:(NSColor *)color;
+- (void)setIconName:(NSString *)name;
+- (void)setMiniwindowImage:(BOOL)set;
+- (void)setName:(NSString *)name iconName:(NSString *)iconName;
+- (void)setRepresentedFilename:(NSString *)name;
+- (void)setDocEdited:(BOOL)edited;
+- (void)setToolBarLines;
+- (void)frameRestack:(EmacsFrame *)frame above:(BOOL)above;
+- (NSScreen *)screen;
+- (void)showCharacterPalette;
 @end
 
 

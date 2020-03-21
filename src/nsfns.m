@@ -118,7 +118,7 @@ ns_get_window (Lisp_Object maybeFrame)
     maybeFrame = selected_frame; /* wrong_type_argument (Qframep, maybeFrame); */
 
   if (!NILP (maybeFrame))
-    view = FRAME_NS_VIEW (XFRAME (maybeFrame));
+    view = FRAME_NS_FRAME_PROXY_WAIT (XFRAME (maybeFrame));
   if (view) window =[view window];
 
   return window;
@@ -260,7 +260,7 @@ ns_set_foreground_color (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
                    (unsigned long) (g * 0xff),
                    (unsigned long) (b * 0xff));
 
-  if (FRAME_NS_VIEW (f))
+  if (FRAME_NS_P (f))
     {
       update_face_from_frame_parameter (f, Qforeground_color, arg);
       /* recompute_basic_faces (f); */
@@ -276,7 +276,7 @@ ns_set_background_color (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
 {
   struct face *face;
   NSColor *col;
-  NSView *view = FRAME_NS_VIEW (f);
+  EmacsFrame *frame = FRAME_NS_FRAME_PROXY (f);
   EmacsCGFloat r, g, b, alpha;
 
   block_input ();
@@ -298,14 +298,10 @@ ns_set_background_color (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
                    (unsigned long) (g * 0xff),
                    (unsigned long) (b * 0xff));
 
-  if (view != nil)
+  /* Surely this isn't the way to check if the frame is good?  */
+  if (FRAME_NS_FRAME (f))
     {
-      [[view window] setBackgroundColor: col];
-
-      if (alpha != (EmacsCGFloat) 1.0)
-          [[view window] setOpaque: NO];
-      else
-          [[view window] setOpaque: YES];
+      [frame setBackgroundColor:col];
 
       face = FRAME_DEFAULT_FACE (f);
       if (face)
@@ -356,7 +352,7 @@ ns_set_cursor_color (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
 static void
 ns_set_icon_name (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
 {
-  NSView *view = FRAME_NS_VIEW (f);
+  EmacsFrame *frame = FRAME_NS_FRAME_PROXY (f);
   NSTRACE ("ns_set_icon_name");
 
   /* See if it's changed.  */
@@ -387,45 +383,23 @@ ns_set_icon_name (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
           }
     }
 
-  /* Don't change the name if it's already NAME.  */
-  if ([[view window] miniwindowTitle]
-      && ([[[view window] miniwindowTitle]
-             isEqualToString: [NSString stringWithUTF8String:
-					  SSDATA (arg)]]))
-    return;
-
-  [[view window] setMiniwindowTitle:
-        [NSString stringWithUTF8String: SSDATA (arg)]];
+  [frame setIconName: [NSString stringWithUTF8String:SSDATA (arg)]];
 }
 
 static void
 ns_set_name_internal (struct frame *f, Lisp_Object name)
 {
   Lisp_Object encoded_name, encoded_icon_name;
-  NSString *str;
-  NSView *view = FRAME_NS_VIEW (f);
-
 
   encoded_name = ENCODE_UTF_8 (name);
-
-  str = [NSString stringWithUTF8String: SSDATA (encoded_name)];
-
-
-  /* Don't change the name if it's already NAME.  */
-  if (! [[[view window] title] isEqualToString: str])
-    [[view window] setTitle: str];
 
   if (!STRINGP (f->icon_name))
     encoded_icon_name = encoded_name;
   else
     encoded_icon_name = ENCODE_UTF_8 (f->icon_name);
 
-  str = [NSString stringWithUTF8String: SSDATA (encoded_icon_name)];
-
-  if ([[view window] miniwindowTitle]
-      && ! [[[view window] miniwindowTitle] isEqualToString: str])
-    [[view window] setMiniwindowTitle: str];
-
+  [FRAME_NS_FRAME_PROXY (f) setName:[NSString stringWithUTF8String:SSDATA (encoded_name)]
+                           iconName:[NSString stringWithUTF8String:SSDATA (encoded_icon_name)]];
 }
 
 static void
@@ -472,7 +446,6 @@ ns_set_represented_filename (struct frame *f)
   Lisp_Object buf = XWINDOW (f->selected_window)->contents;
   NSAutoreleasePool *pool;
   NSString *fstr;
-  NSView *view = FRAME_NS_VIEW (f);
 
   NSTRACE ("ns_set_represented_filename");
 
@@ -504,14 +477,7 @@ ns_set_represented_filename (struct frame *f)
     fstr = @"";
 #endif
 
-#ifdef NS_IMPL_COCOA
-  /* Work around a bug observed on 10.3 and later where
-     setTitleWithRepresentedFilename does not clear out previous state
-     if given filename does not exist.  */
-  if (! [[NSFileManager defaultManager] fileExistsAtPath: fstr])
-    [[view window] setRepresentedFilename: @""];
-#endif
-  [[view window] setRepresentedFilename: fstr];
+  [FRAME_NS_FRAME_PROXY (f) setRepresentedFilename:fstr];
 
   [pool release];
   unblock_input ();
@@ -579,15 +545,13 @@ ns_set_doc_edited (void)
       BOOL edited = NO;
       struct frame *f = XFRAME (frame);
       struct window *w;
-      NSView *view;
 
       if (! FRAME_NS_P (f)) continue;
       w = XWINDOW (FRAME_SELECTED_WINDOW (f));
-      view = FRAME_NS_VIEW (f);
       if (!MINI_WINDOW_P (w))
         edited = ! NILP (Fbuffer_modified_p (w->contents)) &&
           ! NILP (Fbuffer_file_name (w->contents));
-      [[view window] setDocumentEdited: edited];
+      [FRAME_NS_FRAME_PROXY (f) setDocEdited:edited];
     }
 
   [pool release];
@@ -666,19 +630,7 @@ ns_set_tool_bar_lines (struct frame *f, Lisp_Object value, Lisp_Object oldval)
           free_frame_tool_bar (f);
           FRAME_EXTERNAL_TOOL_BAR (f) = 0;
 
-          {
-            EmacsView *view = FRAME_NS_VIEW (f);
-            int fs_state = [view fullscreenState];
-
-            if (fs_state == FULLSCREEN_MAXIMIZED)
-              {
-                [view setFSValue:FULLSCREEN_WIDTH];
-              }
-            else if (fs_state == FULLSCREEN_HEIGHT)
-              {
-                [view setFSValue:FULLSCREEN_NONE];
-              }
-          }
+          [FRAME_NS_FRAME_PROXY_WAIT (f) setToolBarLines];
        }
     }
 
@@ -726,7 +678,6 @@ static void
 ns_implicitly_set_icon_type (struct frame *f)
 {
   Lisp_Object tem;
-  EmacsView *view = FRAME_NS_VIEW (f);
   id image = nil;
   Lisp_Object chain, elt;
   NSAutoreleasePool *pool;
@@ -787,7 +738,7 @@ ns_implicitly_set_icon_type (struct frame *f)
 
   [f->output_data.ns->miniimage release];
   f->output_data.ns->miniimage = image;
-  [view setMiniwindowImage: setMini];
+  [FRAME_NS_FRAME_PROXY (f) setMiniwindowImage:setMini];
   [pool release];
   unblock_input ();
 }
@@ -796,7 +747,6 @@ ns_implicitly_set_icon_type (struct frame *f)
 static void
 ns_set_icon_type (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
 {
-  EmacsView *view = FRAME_NS_VIEW (f);
   id image = nil;
   BOOL setMini = YES;
 
@@ -829,7 +779,7 @@ ns_set_icon_type (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
     }
 
   f->output_data.ns->miniimage = image;
-  [view setMiniwindowImage: setMini];
+  [FRAME_NS_FRAME_PROXY (f) setMiniwindowImage:setMini];
 }
 
 /* This is the same as the xfns.c definition.  */
@@ -1417,7 +1367,7 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame,
       else if (! NILP (visibility))
 	{
 	  ns_make_frame_visible (f);
-	  [[FRAME_NS_VIEW (f) window] makeKeyWindow];
+	  [FRAME_NS_FRAME_PROXY (f) focus];
 	}
       else
         {
@@ -1504,14 +1454,10 @@ Some window managers may refuse to restack windows.  */)
   struct frame *f1 = decode_live_frame (frame1);
   struct frame *f2 = decode_live_frame (frame2);
 
-  if (FRAME_NS_VIEW (f1) && FRAME_NS_VIEW (f2))
+  if (FRAME_NS_FRAME (f1) && FRAME_NS_FRAME (f2))
     {
-      NSWindow *window = [FRAME_NS_VIEW (f1) window];
-      NSInteger window2 = [[FRAME_NS_VIEW (f2) window] windowNumber];
-      NSWindowOrderingMode flag = NILP (above) ? NSWindowBelow : NSWindowAbove;
-
-      [window orderWindow: flag
-               relativeTo: window2];
+      [FRAME_NS_FRAME_PROXY (f1) frameRestack:(FRAME_NS_FRAME (f2))
+                                        above:NILP (above)];
 
       return Qt;
     }
@@ -1696,7 +1642,7 @@ Optional arg DIR_ONLY_P, if non-nil, means choose only directories.  */)
       if (str) fname = build_string ([str UTF8String]);
     }
 
-  [[FRAME_NS_VIEW (SELECTED_FRAME ()) window] makeKeyWindow];
+  [FRAME_NS_FRAME_PROXY (SELECTED_FRAME ()) focus];
   unblock_input ();
 
   return fname;
@@ -2500,8 +2446,7 @@ ns_make_monitor_attribute_list (struct MonitorInfo *monitors,
 
       if (FRAME_NS_P (f))
 	{
-          NSView *view = FRAME_NS_VIEW (f);
-          NSScreen *screen = [[view window] screen];
+          NSScreen *screen = [FRAME_NS_FRAME_PROXY_WAIT (f) screen];
           NSUInteger k;
 
           i = -1;
@@ -2944,8 +2889,7 @@ The coordinates X and Y are interpreted in pixels relative to a position
   /* GNUstep doesn't support CGWarpMouseCursorPosition, so none of
      this will work.  */
   struct frame *f = SELECTED_FRAME ();
-  EmacsView *view = FRAME_NS_VIEW (f);
-  NSScreen *screen = [[view window] screen];
+  NSScreen *screen = [FRAME_NS_FRAME_PROXY_WAIT (f) screen];
   NSRect screen_frame = [screen frame];
   int mouse_x, mouse_y;
 
@@ -2984,8 +2928,7 @@ position (0, 0) of the selected frame's terminal.  */)
      (void)
 {
   struct frame *f = SELECTED_FRAME ();
-  EmacsView *view = FRAME_NS_VIEW (f);
-  NSScreen *screen = [[view window] screen];
+  NSScreen *screen = [FRAME_NS_FRAME_PROXY_WAIT (f) screen];
   NSPoint pt = [NSEvent mouseLocation];
 
   return Fcons(make_fixnum(pt.x - screen.frame.origin.x),
@@ -3000,8 +2943,7 @@ DEFUN ("ns-show-character-palette",
        (void)
 {
   struct frame *f = SELECTED_FRAME ();
-  EmacsView *view = FRAME_NS_VIEW (f);
-  [NSApp orderFrontCharacterPalette:view];
+  [FRAME_NS_FRAME_PROXY (f) showCharacterPalette];
 
   return Qnil;
 }

@@ -5496,6 +5496,11 @@ ns_term_shutdown (int sig)
   [[view window] close];
 }
 
+- (void)focus
+{
+  [[view window] makeKeyWindow];
+}
+
 - (void)raiseWithFocus:(BOOL)focus
 {
   block_input ();
@@ -5753,6 +5758,95 @@ ns_term_shutdown (int sig)
 - (void)setNeedsDisplay:(BOOL)display
 {
   [view setNeedsDisplay:display];
+}
+
+- (void)setBackgroundColor:(NSColor *)color
+{
+  [[view window] setBackgroundColor:color];
+
+  if ([color alphaComponent] != 1.0)
+    [[view window] setOpaque:NO];
+  else
+    [[view window] setOpaque:YES];
+}
+
+- (void)setIconName:(NSString *)name
+{
+  /* If name hasn't changed, don't do anything.  */
+  if ([[view window] miniwindowTitle]
+      && ([[[view window] miniwindowTitle] isEqualToString:name]))
+    return;
+
+  [[view window] setMiniwindowTitle:name];
+}
+
+- (void)setMiniwindowImage:(BOOL)set
+{
+  [view setMiniwindowImage:set];
+}
+
+- (void)setName:(NSString *)name iconName:(NSString *)iconName
+{
+  /* Don't change the name if it's already NAME.  */
+  if (! [[[view window] title] isEqualToString:name])
+    [[view window] setTitle:name];
+
+  if ([[view window] miniwindowTitle]
+      && ! [[[view window] miniwindowTitle] isEqualToString:iconName])
+    [[view window] setMiniwindowTitle:iconName];
+}
+
+- (void)setRepresentedFilename:(NSString *)name
+{
+#ifdef NS_IMPL_COCOA
+  /* Work around a bug observed on 10.3 and later where
+     setTitleWithRepresentedFilename does not clear out previous state
+     if given filename does not exist.  */
+  if (! [[NSFileManager defaultManager] fileExistsAtPath:name])
+    [[view window] setRepresentedFilename: @""];
+#endif
+  [[view window] setRepresentedFilename:name];
+}
+
+- (void)setDocEdited:(BOOL)edited
+{
+  [[view window] setDocumentEdited:edited];
+}
+
+/* I don't know what this method is supposed to do, but the code
+   originally came from ns_set_tool_bar_lines.  */
+- (void)setToolBarLines
+{
+  int fs_state = [view fullscreenState];
+
+  if (fs_state == FULLSCREEN_MAXIMIZED)
+    {
+      [view setFSValue:FULLSCREEN_WIDTH];
+    }
+  else if (fs_state == FULLSCREEN_HEIGHT)
+    {
+      [view setFSValue:FULLSCREEN_NONE];
+    }
+}
+
+- (void)frameRestack:(EmacsFrame *)frame above:(BOOL)above
+{
+  NSWindow *window = [view window];
+  NSInteger window2 = [[frame window] windowNumber];
+  NSWindowOrderingMode flag = above ? NSWindowBelow : NSWindowAbove;
+
+  [window orderWindow: flag
+           relativeTo: window2];
+}
+
+- (NSScreen *)screen
+{
+  return [[view window] screen];
+}
+
+- (void)showCharacterPalette
+{
+  [NSApp orderFrontCharacterPalette:view];
 }
 
 @end
