@@ -195,12 +195,15 @@ M-s		next-matching-history-element
   (let ((map (make-keymap)))
     (define-key map "x" 'foo-original)
     map))
+
 (define-derived-mode help-tests-major-mode nil
   "Major mode for testing shadowing.")
+
 (defvar help-tests-minor-mode-map
   (let ((map (make-keymap)))
     (define-key map "x" 'foo-shadow)
     map))
+
 (define-minor-mode help-tests-minor-mode
   "Minor mode for testing shadowing.")
 
@@ -256,7 +259,7 @@ key             binding
    (with-temp-buffer
      (c-mode)
      (outline-minor-mode)
-     (test-re "\\{cc-mode-map}" ".*"))))
+     (test-re "\\{c-mode-map}" ".*"))))
 
 (provide 'help-tests)
 
