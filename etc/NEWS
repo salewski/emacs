@@ -72,7 +72,8 @@ useful on systems such as FreeBSD which ships only with "etc/termcap".
 
 +++
 ** The new option 'lossage-limit' controls the maximum number
-of keystrokes and commands recorded.
+of keystrokes and commands recorded.  The value 1 disables
+the record of keystrokes.
 
 ** Support for '(box . SIZE)' 'cursor-type'.
 By default, 'box' cursor always has a filled box shape.  But if you
