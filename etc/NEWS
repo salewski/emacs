@@ -71,8 +71,9 @@ useful on systems such as FreeBSD which ships only with "etc/termcap".
 * Changes in Emacs 28.1
 
 +++
-** The new option 'lossage-limit' controls the maximum number
-of keystrokes and commands recorded.
+** The new command 'update-lossage-size' allow users to set the maximum
+number of keystrokes and commands recorded.  The new function 'lossage-size'
+returns the current value of this limit
 
 ** Support for '(box . SIZE)' 'cursor-type'.
 By default, 'box' cursor always has a filled box shape.  But if you
