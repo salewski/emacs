@@ -25,9 +25,9 @@ YOSHIDA <syohex@gmail.com>, which can be found at:
 #include <config.h>
 #include "lisp.h"
 
-#include <sqlite3.h>
-
 #ifdef HAVE_SQLITE3
+
+#include <sqlite3.h>
 
 static void
 sqlite_free (void *arg)
