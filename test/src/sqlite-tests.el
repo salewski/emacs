@@ -105,4 +105,19 @@
      (equal (sqlite-select db "select * from test2")
             '(("col1" "col2") ("fóo" 3) ("fóo" 3) ("fo" 4))))))
 
+(ert-deftest sqlite-numbers ()
+  (skip-unless (sqlite-available-p))
+  (let (db)
+    (setq db (sqlite-open))
+    (sqlite-execute
+     db "create table if not exists test3 (col1 integer)")
+    (let ((big (expt 2 50))
+          (small (expt 2 10)))
+      (sqlite-execute db (format "insert into test3 values (%d)" small))
+      (sqlite-execute db (format "insert into test3 values (%d)" big))
+      (should
+       (equal
+        (cdr (sqlite-select db "select * from test3"))
+        (list (list small) (list big)))))))
+
 ;;; sqlite-tests.el ends here

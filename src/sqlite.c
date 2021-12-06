@@ -105,6 +105,7 @@ bind_values (sqlite3 *db, sqlite3_stmt *stmt, Lisp_Object values)
 				   NULL);
 	}
       else if (EQ (type, Qinteger))
+	/* FIXME: Bignums? */
 	ret = sqlite3_bind_int64 (stmt, i + 1, XFIXNUM (value));
       else if (EQ (type, Qfloat))
 	ret = sqlite3_bind_double (stmt, i + 1, XFLOAT_DATA (value));
@@ -213,7 +214,7 @@ row_to_value (sqlite3_stmt *stmt)
       switch (sqlite3_column_type (stmt, i))
 	{
 	case SQLITE_INTEGER:
-	  v = make_fixnum (sqlite3_column_int64 (stmt, i));
+	  v = make_int (sqlite3_column_int64 (stmt, i));
 	  break;
 
 	case SQLITE_FLOAT:
