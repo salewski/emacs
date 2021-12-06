@@ -3028,6 +3028,8 @@ dump_vectorlike (struct dump_context *ctx,
       error_unsupported_dump_object (ctx, lv, "mutex");
     case PVEC_CONDVAR:
       error_unsupported_dump_object (ctx, lv, "condvar");
+    case PVEC_SQLITE:
+      error_unsupported_dump_object (ctx, lv, "sqlite");
     case PVEC_MODULE_FUNCTION:
       error_unsupported_dump_object (ctx, lv, "module function");
     default:

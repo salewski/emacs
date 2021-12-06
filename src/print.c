@@ -1875,6 +1875,15 @@ print_vectorlike (Lisp_Object obj, Lisp_Object printcharfun, bool escapeflag,
       }
       break;
 #endif
+    case PVEC_SQLITE:
+      {
+	print_c_string ("#<sqlite ", printcharfun);
+	int i = sprintf (buf, "ptr=%p", XSQLITE (obj)->db);
+	strout (buf, i, i, printcharfun);
+	printchar ('>', printcharfun);
+      }
+      break;
+
     default:
       emacs_abort ();
     }
