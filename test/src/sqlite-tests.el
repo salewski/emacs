@@ -91,15 +91,18 @@
 
 (ert-deftest sqlite-chars ()
   (skip-unless (sqlite-available-p))
-  (let ((db (sqlite-open)))
+  (let (db)
+    (setq db (sqlite-open))
     (sqlite-execute
      db "create table if not exists test2 (col1 text, col2 integer)")
     (sqlite-execute
      db "insert into test2 (col1, col2) values ('fóo', 3)")
     (sqlite-execute
+     db "insert into test2 (col1, col2) values ('fóo', 3)")
+    (sqlite-execute
      db "insert into test2 (col1, col2) values ('fo', 4)")
     (should
      (equal (sqlite-select db "select * from test2")
-            '(("col1" "col2") ("fóo" 3) ("fo" 4))))))
+            '(("col1" "col2") ("fóo" 3) ("fóo" 3) ("fo" 4))))))
 
 ;;; sqlite-tests.el ends here
