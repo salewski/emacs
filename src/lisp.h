@@ -2574,7 +2574,7 @@ xmint_pointer (Lisp_Object a)
 struct Lisp_Sqlite
 {
   union vectorlike_header header;
-  Lisp_Object fields;
+  Lisp_Object columns;
   void *db;
   void *stmt;
   void (*finalizer) (void *);

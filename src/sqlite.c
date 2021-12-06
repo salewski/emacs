@@ -41,16 +41,15 @@ sqlite_free (void *arg)
 }
 
 static Lisp_Object
-make_sqlite (bool is_statement, void *db, void *stmt, Lisp_Object fields)
+make_sqlite (bool is_statement, void *db, void *stmt, Lisp_Object columns)
 {
   struct Lisp_Sqlite *ptr
-    = ALLOCATE_ZEROED_PSEUDOVECTOR (struct Lisp_Sqlite, fields, PVEC_SQLITE);
-  ptr->fields = Qnil;
+    = ALLOCATE_ZEROED_PSEUDOVECTOR (struct Lisp_Sqlite, columns, PVEC_SQLITE);
   ptr->is_statement = is_statement;
   ptr->finalizer = sqlite_free;
   ptr->db = db;
   ptr->stmt = stmt;
-  ptr->fields = fields;
+  ptr->columns = columns;
   ptr->eof = false;
   return make_lisp_ptr (ptr, Lisp_Vectorlike);
 }
@@ -280,16 +279,16 @@ be queried with `sqlite-next' and other functions to get the data.  */)
     }
 
   /* Get the field names.  */
-  Lisp_Object fields = Qnil;
+  Lisp_Object columns = Qnil;
   int count = sqlite3_column_count (stmt);
   for (int i = 0; i < count; ++i)
-    fields = Fcons (build_string (sqlite3_column_name (stmt, i)), fields);
+    columns = Fcons (build_string (sqlite3_column_name (stmt, i)), columns);
 
-  fields = Fnreverse (fields);
+  columns = Fnreverse (columns);
 
   if (!NILP (cursor))
     {
-      retval = make_sqlite (true, db, stmt, fields);
+      retval = make_sqlite (true, db, stmt, columns);
       goto exit;
     }
 
@@ -298,7 +297,7 @@ be queried with `sqlite-next' and other functions to get the data.  */)
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
     data = Fcons (row_to_value (stmt), data);
 
-  retval = Fcons (fields, Fnreverse (data));
+  retval = Fcons (columns, Fnreverse (data));
   sqlite3_finalize (stmt);
 
  exit:
@@ -387,7 +386,7 @@ DEFUN ("sqlite-columns", Fsqlite_columns, Ssqlite_columns, 1, 1, 0,
   if (!XSQLITE (set)->is_statement)
     xsignal1 (Qerror, build_string ("Invalid set object"));
 
-  return XSQLITE (set)->fields;
+  return XSQLITE (set)->columns;
 }
 
 DEFUN ("sqlite-more-p", Fsqlite_more_p, Ssqlite_more_p, 1, 1, 0,
