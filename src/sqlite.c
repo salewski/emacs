@@ -413,14 +413,18 @@ DEFUN ("sqlite-more-p", Fsqlite_more_p, Ssqlite_more_p, 1, 1, 0,
     return Qt;
 }
 
+#endif /* HAVE_SQLITE3 */
+
 DEFUN ("sqlitep", Fsqlitep, Ssqlitep, 1, 1, 0,
        doc: /* Say whether OBJECT is an SQlite object.  */)
   (Lisp_Object object)
 {
+#ifdef HAVE_SQLITE3
   return SQLITE (object)? Qt: Qnil;
+#else
+  return Qnil;
+#endif
 }
-
-#endif /* HAVE_SQLITE3 */
 
 DEFUN ("sqlite-available-p", Fsqlite_available_p, Ssqlite_available_p, 0, 0, 0,
        doc: /* Return t if sqlite3 support is available in this instance of Emacs.*/)
@@ -432,7 +436,6 @@ DEFUN ("sqlite-available-p", Fsqlite_available_p, Ssqlite_available_p, 0, 0, 0,
   return Qnil;
 #endif
 }
-
 
 void
 syms_of_sqlite (void)
@@ -448,9 +451,9 @@ syms_of_sqlite (void)
   defsubr (&Ssqlite_next);
   defsubr (&Ssqlite_columns);
   defsubr (&Ssqlite_more_p);
+#endif
   defsubr (&Ssqlitep);
   DEFSYM (Qsqlitep, "sqlitep");
-#endif
   defsubr (&Ssqlite_available_p);
   DEFSYM (Qfalse, "false");
   DEFSYM (Qsqlite, "sqlite");
