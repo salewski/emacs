@@ -24,6 +24,7 @@ YOSHIDA <syohex@gmail.com>, which can be found at:
 
 #include <config.h>
 #include "lisp.h"
+#include "coding.h"
 
 #ifdef HAVE_SQLITE3
 
@@ -96,9 +97,13 @@ bind_values (sqlite3 *db, sqlite3_stmt *stmt, Lisp_Object values)
       Lisp_Object type = Ftype_of (value);
 
       if (EQ (type, Qstring))
-	ret = sqlite3_bind_text (stmt, i + 1,
-				 SSDATA (value), SBYTES (value),
-				 NULL);
+	{
+	  Lisp_Object encoded =
+	    code_convert_string_norecord (value, Qutf_8, true);
+	  ret = sqlite3_bind_text (stmt, i + 1,
+				   SSDATA (encoded), SBYTES (encoded),
+				   NULL);
+	}
       else if (EQ (type, Qinteger))
 	ret = sqlite3_bind_int64 (stmt, i + 1, XFIXNUM (value));
       else if (EQ (type, Qfloat))
@@ -216,19 +221,23 @@ row_to_value (sqlite3_stmt *stmt)
 	  break;
 
 	case SQLITE_BLOB:
-	  v = make_string (sqlite3_column_blob (stmt, i),
-			   sqlite3_column_bytes (stmt, i));
+	  v =
+	    code_convert_string_norecord
+	    (make_string (sqlite3_column_blob (stmt, i),
+			  sqlite3_column_bytes (stmt, i)),
+	     Qutf_8, false);
 	  break;
 
 	case SQLITE_NULL:
 	  v = Qnil;
 	  break;
 
-	  /* The data in sqlite3 is utf-8, so we apparently don't have
-	     to do any de/encoding.  */
 	case SQLITE_TEXT:
-	  v = make_string ((const char*)sqlite3_column_text (stmt, i),
-			   sqlite3_column_bytes (stmt, i));
+	  v =
+	    code_convert_string_norecord
+	    (make_string ((const char*)sqlite3_column_text (stmt, i),
+			  sqlite3_column_bytes (stmt, i)),
+	     Qutf_8, false);
 	  break;
 	}
 
