@@ -131,8 +131,12 @@ bind_values (sqlite3 *db, sqlite3_stmt *stmt, Lisp_Object values)
 				   NULL);
 	}
       else if (EQ (type, Qinteger))
-	/* FIXME: Bignums? */
-	ret = sqlite3_bind_int64 (stmt, i + 1, XFIXNUM (value));
+	{
+	  if (BIGNUMP (value))
+	    ret = sqlite3_bind_int64 (stmt, i + 1, bignum_to_intmax (value));
+	  else
+	    ret = sqlite3_bind_int64 (stmt, i + 1, XFIXNUM (value));
+	}
       else if (EQ (type, Qfloat))
 	ret = sqlite3_bind_double (stmt, i + 1, XFLOAT_DATA (value));
       else if (NILP (value))
