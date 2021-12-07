@@ -162,8 +162,6 @@ executing a statement like
 
    insert into foo values (?, ?, ...)
 
-QUERY can include several statements, separated by a semicolon.
-
 The number of affected rows is returned.  */)
   (Lisp_Object db, Lisp_Object query, Lisp_Object values)
 {
@@ -173,60 +171,53 @@ The number of affected rows is returned.  */)
     xsignal1 (Qerror, build_string ("VALUES must be a list or a vector"));
 
   sqlite3 *sdb = XSQLITE (db)->db;
-  char *sql, *tail;
   Lisp_Object retval = Qnil;
   const char *errmsg = NULL;
+  Lisp_Object encoded;
+  sqlite3_stmt *stmt = NULL;
 
-  char *top = xmalloc (SBYTES (query) + 1);
-  if (top == NULL)
-    return Qnil;
+  if (STRING_MULTIBYTE (query))
+    encoded = encode_string_utf_8 (query, Qnil, 0, Qt, Qt);
+  else
+    encoded = query;
 
-  memcpy (top, SSDATA (query), SBYTES (query) + 1);
-  tail = top;
-
-  while (*(sql = tail) != '\0')
+  /* We only execute the first statement -- if there's several
+     (separated by a semicolon), the subsequent statements won't be
+     done.  */
+  int ret = sqlite3_prepare_v2 (sdb, SSDATA (encoded), -1, &stmt, NULL);
+  if (ret != SQLITE_OK)
     {
-      sqlite3_stmt *stmt = NULL;
-      int ret = sqlite3_prepare_v2 (sdb, sql, -1, &stmt, (const char**)&tail);
-      /* FIXME: Same values for each statement? */
-      if (!NILP (values)) {
-	const char *err = bind_values (sdb, stmt, values);
-	if (err != NULL)
-	  {
-	    errmsg = err;
-	    goto exit;
-	  }
+      if (stmt != NULL)
+	{
+	  sqlite3_finalize (stmt);
+	  sqlite3_reset (stmt);
+	}
+
+      errmsg = sqlite3_errmsg (sdb);
+      goto exit;
+    }
+
+  /* Bind ? values.  */
+  if (!NILP (values)) {
+    const char *err = bind_values (sdb, stmt, values);
+    if (err != NULL)
+      {
+	errmsg = err;
+	goto exit;
       }
+  }
 
-      if (ret != SQLITE_OK)
-	{
-	  if (stmt != NULL)
-	    {
-	      sqlite3_finalize (stmt);
-	      sqlite3_reset (stmt);
-	    }
-
-	  errmsg = sqlite3_errmsg (sdb);
-	  goto exit;
-	}
-
-      if (stmt == NULL)
-	continue;
-
-      ret = sqlite3_step (stmt);
-      sqlite3_finalize (stmt);
-      if (ret != SQLITE_OK && ret != SQLITE_DONE)
-	{
-	  errmsg = sqlite3_errmsg (sdb);
-	  goto exit;
-	}
+  ret = sqlite3_step (stmt);
+  sqlite3_finalize (stmt);
+  if (ret != SQLITE_OK && ret != SQLITE_DONE)
+    {
+      errmsg = sqlite3_errmsg (sdb);
+      goto exit;
     }
 
   retval = make_fixnum (sqlite3_changes (sdb));
 
  exit:
-  xfree (top);
-
   if (errmsg != NULL)
     xsignal1 (Qerror, build_string (errmsg));
 
