@@ -74,6 +74,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
              sticky--db
              "select name from sqlite_master where type='table' and name='sticky'")
       ;; Create the table.
+      (sqlite-execute sticky--db "PRAGMA auto_vacuum = FULL")
       (sqlite-execute
        sticky--db
        "create table sticky (package text not null, key text not null, sequence number not null, value text not null)")
