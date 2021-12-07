@@ -77,7 +77,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
       (sqlite-execute sticky--db "PRAGMA auto_vacuum = FULL")
       (sqlite-execute
        sticky--db
-       "create table sticky (package text not null, key text not null, sequence number not null, value text not null)")
+       "create table sticky (package text not null, key text not null, sequence number not null default 1, value text not null)")
       (sqlite-execute
        sticky--db
        "create unique index sticky_idx on sticky (package, key)"))))
@@ -139,29 +139,18 @@ DOC should be a doc string, and ARGS are keywords as applicable to
     ;; We have a backend.
     (sticky--ensure-db)
     (with-sqlite-transaction sticky--db
-      (let* ((id (list (symbol-name (sticky--package object))
-                       (symbol-name (sticky--key object))))
-             (old-sequence
-              (caar
-               (sqlite-select
-                sticky--db
-                "select sequence from sticky where package = ? and key = ?" id))))
-        (if old-sequence
-            (progn
-              (setf (sticky--cached-sequence object) (1+ old-sequence))
-              (sqlite-execute
-               sticky--db
-               "update sticky set value = ?, sequence = ? where package = ? and key = ?"
-               (cons (prin1-to-string value)
-                     (cons (sticky--cached-sequence object)
-                           id))))
-          (cl-incf (sticky--cached-sequence object))
-          (sqlite-execute
-           sticky--db
-           "insert into sticky (package, key, sequence, value) values (?, ?, ?, ?)"
-           (nconc id (list (sticky--cached-sequence object)
-                           (prin1-to-string value)))))
-        (setf (sticky--cached-value object) value)))))
+      (let ((id (list (symbol-name (sticky--package object))
+                      (symbol-name (sticky--key object))))
+            (pvalue (prin1-to-string value)))
+        (sqlite-execute
+         sticky--db
+         "insert into sticky(package, key, sequence, value) values(?, ?, 1, ?) on conflict(package, key) do update set sequence = sequence + 1, value = ?"
+         (append id (list pvalue pvalue)))
+        (setf (sticky--cached-sequence object)
+              (caar (sqlite-select
+                     sticky--db
+                     "select sequence from sticky where package = ? and key = ?"
+                     id)))))))
 
 (gv-define-simple-setter sticky-value sticky--set-value)
 
