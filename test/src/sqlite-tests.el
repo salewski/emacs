@@ -40,14 +40,12 @@
 
     (should-error
      (sqlite-execute
-      db
-      "insert into test1 (col1, col2, col3, col4) values ('foo', 2, 9.45, 'bar', 'zot')"))
+      db "insert into test1 (col1, col2, col3, col4) values ('foo', 2, 9.45, 'bar', 'zot')"))
 
     (should
      (=
       (sqlite-execute
-       db
-       "insert into test1 (col1, col2, col3, col4) values ('foo', 2, 9.45, 'bar')")
+       db "insert into test1 (col1, col2, col3, col4) values ('foo', 2, 9.45, 'bar')")
       1))
 
     (should
@@ -68,24 +66,20 @@
 
     (should
      (=
-      (sqlite-execute
-       db "insert into test1 (col1, col2) values ('foo', 1)")
+      (sqlite-execute db "insert into test1 (col1, col2) values ('foo', 1)")
       1))
     (should
      (=
-      (sqlite-execute
-       db "insert into test1 (col1, col2) values ('bar', 2)")
+      (sqlite-execute db "insert into test1 (col1, col2) values ('bar', 2)")
       1))
 
     (setq set (sqlite-select db "select * from test1" nil 'set))
     (should (sqlitep set))
     (should (sqlite-more-p set))
-    (should
-     (equal (sqlite-next set)
-            '("foo" 1)))
-    (should
-     (equal (sqlite-next set)
-            '("bar" 2)))
+    (should (equal (sqlite-next set)
+                   '("foo" 1)))
+    (should (equal (sqlite-next set)
+                   '("bar" 2)))
     (should-not (sqlite-next set))
     (should-not (sqlite-more-p set))))
 
@@ -126,18 +120,14 @@
     (setq db (sqlite-open))
     (sqlite-execute
      db "create table if not exists test4 (col1 text, col2 number)")
-    (sqlite-execute
-     db "insert into test4 values (?, ?)"
-     (list "foo" 1))
+    (sqlite-execute db "insert into test4 values (?, ?)" (list "foo" 1))
     (should
      (equal
-      (sqlite-select
-       db "select * from test4 where col2 = ?" '(1))
+      (sqlite-select db "select * from test4 where col2 = ?" '(1))
       '(("foo" 1))))
     (should
      (equal
-      (sqlite-select
-       db "select * from test4 where col2 = ?" [1])
+      (sqlite-select db "select * from test4 where col2 = ?" [1])
       '(("foo" 1))))))
 
 (ert-deftest sqlite-binary ()
@@ -152,9 +142,7 @@
                     (buffer-string))))
       (should-not (multibyte-string-p string))
       (sqlite-execute
-       db
-       "insert into test5 values (?, ?)"
-       (list string 2))
+       db "insert into test5 values (?, ?)" (list string 2))
       (let ((out (caar
                   (sqlite-select db "select col1 from test5 where col2 = 2"))))
         (should (equal out string))))))
