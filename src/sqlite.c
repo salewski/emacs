@@ -38,47 +38,60 @@ sqlite_free (void *arg)
     sqlite3_finalize (ptr->stmt);
   else if (ptr->db)
     sqlite3_close (ptr->db);
+  xfree (ptr->name);
   xfree (ptr);
 }
 
 static Lisp_Object
-make_sqlite (bool is_statement, void *db, void *stmt)
+make_sqlite (bool is_statement, void *db, void *stmt, char *name)
 {
   struct Lisp_Sqlite *ptr
     = ALLOCATE_PLAIN_PSEUDOVECTOR (struct Lisp_Sqlite, PVEC_SQLITE);
   ptr->is_statement = is_statement;
   ptr->finalizer = sqlite_free;
   ptr->db = db;
+  ptr->name = name;
   ptr->stmt = stmt;
   ptr->eof = false;
   return make_lisp_ptr (ptr, Lisp_Vectorlike);
 }
+
+static int db_count = 0;
 
 DEFUN ("sqlite-open", Fsqlite_open, Ssqlite_open, 0, 1, 0,
        doc: /* Open FILE as an sqlite database.
 If FILE is nil, an in-memory database will be opened instead.  */)
   (Lisp_Object file)
 {
+  char *name;
+
   if (!NILP (file))
     {
       CHECK_STRING (file);
-      file = Fexpand_file_name (file, Qnil);
+      name = xstrdup (SSDATA (Fexpand_file_name (file, Qnil)));
+    }
+  else
+    {
+      name = xstrdup (SSDATA (CALLN (Fformat, build_string (":memory:%d"),
+				     make_int (++db_count))));
     }
 
   sqlite3 *sdb;
-  int ret = sqlite3_open_v2 (NILP (file) ? ":memory:" : SSDATA (file),
+  int ret = sqlite3_open_v2 (name,
 			     &sdb,
 			     SQLITE_OPEN_FULLMUTEX
 			     | SQLITE_OPEN_READWRITE
 			     | SQLITE_OPEN_CREATE
+			     | (NILP (file) ? SQLITE_OPEN_MEMORY : 0)
 #ifdef SQLITE_OPEN_URI
 			     | SQLITE_OPEN_URI
 #endif
 			     | 0, NULL);
+
   if (ret != SQLITE_OK)
     return Qnil;
 
-  return make_sqlite (false, sdb, NULL);
+  return make_sqlite (false, sdb, NULL, name);
 }
 
 /* Bind values in a statement like
@@ -323,7 +336,7 @@ which means that we return a set object that can be queried with
 
   if (EQ (return_type, Qset))
     {
-      retval = make_sqlite (true, db, stmt);
+      retval = make_sqlite (true, db, stmt, XSQLITE (db)->name);
       goto exit;
     }
 

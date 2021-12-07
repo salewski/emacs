@@ -2576,6 +2576,7 @@ struct Lisp_Sqlite
   union vectorlike_header header;
   void *db;
   void *stmt;
+  char *name;
   void (*finalizer) (void *);
   bool eof;
   bool is_statement;

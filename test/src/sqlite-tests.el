@@ -159,4 +159,18 @@
                   (sqlite-select db "select col1 from test5 where col2 = 2"))))
         (should (equal out string))))))
 
+(ert-deftest sqlite-different-dbs ()
+  (skip-unless (sqlite-available-p))
+  (let (db1 db2)
+    (setq db1 (sqlite-open))
+    (setq db2 (sqlite-open))
+    (sqlite-execute
+     db1 "create table if not exists test6 (col1 text, col2 number)")
+    (sqlite-execute
+     db2 "create table if not exists test6 (col1 text, col2 number)")
+    (sqlite-execute
+     db1 "insert into test6 values (?, ?)" '("foo" 2))
+    (should (sqlite-select db1 "select * from test6"))
+    (should-not (sqlite-select db2 "select * from test6"))))
+
 ;;; sqlite-tests.el ends here
