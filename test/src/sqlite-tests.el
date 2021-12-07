@@ -140,4 +140,23 @@
        db "select * from test4 where col2 = ?" [1])
       '(("foo" 1))))))
 
+(ert-deftest sqlite-binary ()
+  (skip-unless (sqlite-available-p))
+  (let (db)
+    (setq db (sqlite-open))
+    (sqlite-execute
+     db "create table if not exists test5 (col1 text, col2 number)")
+    (let ((string (with-temp-buffer
+                    (set-buffer-multibyte nil)
+                    (insert 0 1 2)
+                    (buffer-string))))
+      (should-not (multibyte-string-p string))
+      (sqlite-execute
+       db
+       "insert into test5 values (?, ?)"
+       (list string 2))
+      (let ((out (caar
+                  (sqlite-select db "select col1 from test5 where col2 = 2"))))
+        (should (equal out string))))))
+
 ;;; sqlite-tests.el ends here

@@ -108,8 +108,11 @@ bind_values (sqlite3 *db, sqlite3_stmt *stmt, Lisp_Object values)
 
       if (EQ (type, Qstring))
 	{
-	  Lisp_Object encoded =
-	    code_convert_string_norecord (value, Qutf_8, true);
+	  Lisp_Object encoded;
+	  if (STRING_MULTIBYTE (value))
+	    encoded = encode_string_utf_8 (value, Qnil, 0, Qt, Qt);
+	  else
+	    encoded = value;
 	  ret = sqlite3_bind_text (stmt, i + 1,
 				   SSDATA (encoded), SBYTES (encoded),
 				   NULL);
