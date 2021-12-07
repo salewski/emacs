@@ -150,7 +150,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
               (caar (sqlite-select
                      sticky--db
                      "select sequence from sticky where package = ? and key = ?"
-                     id)))))))
+                     id)))
+        (setf (sticky--cached-value object) value)))))
 
 (gv-define-simple-setter sticky-value sticky--set-value)
 
