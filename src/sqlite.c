@@ -43,6 +43,15 @@ sqlite_free (void *arg)
 }
 
 static Lisp_Object
+encode_string (Lisp_Object string)
+{
+  if (STRING_MULTIBYTE (string))
+    return encode_string_utf_8 (string, Qnil, 0, Qt, Qt);
+  else
+    return string;
+}
+
+static Lisp_Object
 make_sqlite (bool is_statement, void *db, void *stmt, char *name)
 {
   struct Lisp_Sqlite *ptr
@@ -121,11 +130,7 @@ bind_values (sqlite3 *db, sqlite3_stmt *stmt, Lisp_Object values)
 
       if (EQ (type, Qstring))
 	{
-	  Lisp_Object encoded;
-	  if (STRING_MULTIBYTE (value))
-	    encoded = encode_string_utf_8 (value, Qnil, 0, Qt, Qt);
-	  else
-	    encoded = value;
+	  Lisp_Object encoded = encode_string (value);
 	  ret = sqlite3_bind_text (stmt, i + 1,
 				   SSDATA (encoded), SBYTES (encoded),
 				   NULL);
@@ -173,13 +178,8 @@ The number of affected rows is returned.  */)
   sqlite3 *sdb = XSQLITE (db)->db;
   Lisp_Object retval = Qnil;
   const char *errmsg = NULL;
-  Lisp_Object encoded;
+  Lisp_Object encoded = encode_string (query);
   sqlite3_stmt *stmt = NULL;
-
-  if (STRING_MULTIBYTE (query))
-    encoded = encode_string_utf_8 (query, Qnil, 0, Qt, Qt);
-  else
-    encoded = query;
 
   /* We only execute the first statement -- if there's several
      (separated by a semicolon), the subsequent statements won't be
@@ -306,9 +306,10 @@ which means that we return a set object that can be queried with
   sqlite3 *sdb = XSQLITE (db)->db;
   Lisp_Object retval = Qnil;
   const char *errmsg = NULL;
+  Lisp_Object encoded = encode_string (query);
 
   sqlite3_stmt *stmt = NULL;
-  int ret = sqlite3_prepare_v2 (sdb, SSDATA (query), SBYTES (query),
+  int ret = sqlite3_prepare_v2 (sdb, SSDATA (encoded), SBYTES (encoded),
 				&stmt, NULL);
   if (ret != SQLITE_OK)
     {
