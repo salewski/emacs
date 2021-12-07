@@ -25,7 +25,7 @@
 
 (defmacro with-sqlite-transaction (db &rest body)
   "Execute BODY while holding a transaction for DB."
-  (declare (indent 1))
+  (declare (indent 1) (debug (form body)))
   (let ((db-var (gensym)))
     `(let ((,db-var ,db))
        (if (sqlite-available-p)
