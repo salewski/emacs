@@ -42,15 +42,14 @@ sqlite_free (void *arg)
 }
 
 static Lisp_Object
-make_sqlite (bool is_statement, void *db, void *stmt, Lisp_Object columns)
+make_sqlite (bool is_statement, void *db, void *stmt)
 {
   struct Lisp_Sqlite *ptr
-    = ALLOCATE_ZEROED_PSEUDOVECTOR (struct Lisp_Sqlite, columns, PVEC_SQLITE);
+    = ALLOCATE_PLAIN_PSEUDOVECTOR (struct Lisp_Sqlite, PVEC_SQLITE);
   ptr->is_statement = is_statement;
   ptr->finalizer = sqlite_free;
   ptr->db = db;
   ptr->stmt = stmt;
-  ptr->columns = columns;
   ptr->eof = false;
   return make_lisp_ptr (ptr, Lisp_Vectorlike);
 }
@@ -79,7 +78,7 @@ If FILE is nil, an in-memory database will be opened instead.  */)
   if (ret != SQLITE_OK)
     return Qnil;
 
-  return make_sqlite (false, sdb, NULL, Qnil);
+  return make_sqlite (false, sdb, NULL);
 }
 
 /* Bind values in a statement like
@@ -261,6 +260,17 @@ row_to_value (sqlite3_stmt *stmt)
   return Fnreverse (values);
 }
 
+static Lisp_Object
+column_names (sqlite3_stmt *stmt)
+{
+  Lisp_Object columns = Qnil;
+  int count = sqlite3_column_count (stmt);
+  for (int i = 0; i < count; ++i)
+    columns = Fcons (build_string (sqlite3_column_name (stmt, i)), columns);
+
+  return Fnreverse (columns);
+}
+
 DEFUN ("sqlite-select", Fsqlite_select, Ssqlite_select, 2, 4, 0,
        doc: /* Select data from the database DB that matches QUERY.
 If VALUES is non-nil, they are values that will be interpolated into a
@@ -308,21 +318,9 @@ which means that we return a set object that can be queried with
 	}
     }
 
-  /* Get the field names.  */
-  Lisp_Object columns = Qnil;
-  if (EQ (return_type, Qset)
-      || EQ (return_type, Qfull))
-    {
-      int count = sqlite3_column_count (stmt);
-      for (int i = 0; i < count; ++i)
-	columns = Fcons (build_string (sqlite3_column_name (stmt, i)), columns);
-
-      columns = Fnreverse (columns);
-    }
-
   if (EQ (return_type, Qset))
     {
-      retval = make_sqlite (true, db, stmt, columns);
+      retval = make_sqlite (true, db, stmt);
       goto exit;
     }
 
@@ -332,7 +330,7 @@ which means that we return a set object that can be queried with
     data = Fcons (row_to_value (stmt), data);
 
   if (EQ (return_type, Qfull))
-    retval = Fcons (columns, Fnreverse (data));
+    retval = Fcons (column_names (stmt), Fnreverse (data));
   else
     retval = Fnreverse (data);
   sqlite3_finalize (stmt);
@@ -423,7 +421,7 @@ DEFUN ("sqlite-columns", Fsqlite_columns, Ssqlite_columns, 1, 1, 0,
   if (!XSQLITE (set)->is_statement)
     xsignal1 (Qerror, build_string ("Invalid set object"));
 
-  return XSQLITE (set)->columns;
+  return column_names (XSQLITE (set)->stmt);
 }
 
 DEFUN ("sqlite-more-p", Fsqlite_more_p, Ssqlite_more_p, 1, 1, 0,
