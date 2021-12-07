@@ -71,10 +71,10 @@ If FILE is nil, an in-memory database will be opened instead.  */)
       name = xstrdup (SSDATA (Fexpand_file_name (file, Qnil)));
     }
   else
-    {
-      name = xstrdup (SSDATA (CALLN (Fformat, build_string (":memory:%d"),
-				     make_int (++db_count))));
-    }
+    /* In-memory database.  These have to have different names to
+       refer to different databases.  */
+    name = xstrdup (SSDATA (CALLN (Fformat, build_string (":memory:%d"),
+				   make_int (++db_count))));
 
   sqlite3 *sdb;
   int ret = sqlite3_open_v2 (name,
@@ -104,7 +104,7 @@ bind_values (sqlite3 *db, sqlite3_stmt *stmt, Lisp_Object values)
   if (VECTORP (values))
     len = ASIZE (values);
   else
-    len = XFIXNUM (Flength (values));
+    len = list_length (values);
 
   for (int i = 0; i < len; ++i)
     {
@@ -323,6 +323,7 @@ which means that we return a set object that can be queried with
       goto exit;
     }
 
+  /* Query with parameters.  */
   if (!NILP (values))
     {
       const char *err = bind_values (sdb, stmt, values);
@@ -334,6 +335,7 @@ which means that we return a set object that can be queried with
 	}
     }
 
+  /* Return a handle to get the data.  */
   if (EQ (return_type, Qset))
     {
       retval = make_sqlite (true, db, stmt, XSQLITE (db)->name);
