@@ -25,6 +25,7 @@
 
 (require 'cl-lib)
 (require 'eieio)
+(require 'sqlite)
 
 (defmacro define-sticky-variable (name initial-value &optional doc
                                        &rest args)
@@ -68,20 +69,17 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (unless sticky--db
     (setq sticky--db
           (sqlite-open (expand-file-name "sticky.sqlite" "~/.emacs.d/"))))
-  (unwind-protect
-      (progn
-        (sqlite-transaction sticky--db)
-        (unless (sqlite-select
-                 sticky--db
-                 "select name from sqlite_master where type='table' and name='sticky'")
-          ;; Create the table.
-          (sqlite-execute
-           sticky--db
-           "create table sticky (package text not null, key text not null, sequence number not null, value text not null)")
-          (sqlite-execute
-           sticky--db
-           "create unique index sticky_idx on sticky (package, key)")))
-    (sqlite-commit sticky--db)))
+  (with-sqlite-transaction sticky--db
+    (unless (sqlite-select
+             sticky--db
+             "select name from sqlite_master where type='table' and name='sticky'")
+      ;; Create the table.
+      (sqlite-execute
+       sticky--db
+       "create table sticky (package text not null, key text not null, sequence number not null, value text not null)")
+      (sqlite-execute
+       sticky--db
+       "create unique index sticky_idx on sticky (package, key)"))))
 
 (defun sticky-value (object)
   "Return the value of the sticky OBJECT."
@@ -138,33 +136,30 @@ DOC should be a doc string, and ARGS are keywords as applicable to
       ;; We have no backend, so just store the value.
       (setf (sticky--cached-value object) value)
     ;; We have a backend.
-    (unwind-protect
-        (progn
-          (sqlite-transaction sticky--db)
-          (let* ((id (list (symbol-name (sticky--package object))
-                           (symbol-name (sticky--key object))))
-                 (old-sequence
-                  (sqlite-select
-                   sticky--db
-                   "select sequence from sticky where package = ? and key = ?" id)))
-            (if old-sequence
-                (progn
-                  (setf (sticky--cached-sequence object) (1+ old-sequence))
-                  (sqlite-execute
-                   sticky--db
-                   "update sticky set value = ?, sequence = ? where package = ? and key = ?"
-                   (cons (prin1-to-string value)
-                         (cons (sticky--cached-sequence object)
-                               id))))
-              (cl-incf (sticky--cached-sequence object))
+    (with-sqlite-transaction sticky--db
+      (let* ((id (list (symbol-name (sticky--package object))
+                       (symbol-name (sticky--key object))))
+             (old-sequence
+              (sqlite-select
+               sticky--db
+               "select sequence from sticky where package = ? and key = ?" id)))
+        (if old-sequence
+            (progn
+              (setf (sticky--cached-sequence object) (1+ old-sequence))
               (sqlite-execute
                sticky--db
-               "insert into sticky (package, key, value, sequence) values (?, ?, ?, ?)"
+               "update sticky set value = ?, sequence = ? where package = ? and key = ?"
                (cons (prin1-to-string value)
                      (cons (sticky--cached-sequence object)
                            id))))
-            (setf (sticky--cached-value object) value)))
-      (sqlite-commit sticky--db))))
+          (cl-incf (sticky--cached-sequence object))
+          (sqlite-execute
+           sticky--db
+           "insert into sticky (package, key, value, sequence) values (?, ?, ?, ?)"
+           (cons (prin1-to-string value)
+                 (cons (sticky--cached-sequence object)
+                       id))))
+        (setf (sticky--cached-value object) value)))))
 
 (gv-define-simple-setter sticky-value sticky--set-value)
 
