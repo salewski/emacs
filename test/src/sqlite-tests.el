@@ -52,7 +52,7 @@
 
     (should
      (equal
-      (sqlite-select  db "select * from test1")
+      (sqlite-select  db "select * from test1" nil 'full)
       '(("col1" "col2" "col3" "col4") ("foo" 2 9.45 "bar"))))))
 
 ;; (setq db (sqlite-open))
@@ -77,7 +77,7 @@
        db "insert into test1 (col1, col2) values ('bar', 2)")
       1))
 
-    (setq set (sqlite-select db "select * from test1" nil t))
+    (setq set (sqlite-select db "select * from test1" nil 'set))
     (should (sqlitep set))
     (should (sqlite-more-p set))
     (should
@@ -102,7 +102,7 @@
     (sqlite-execute
      db "insert into test2 (col1, col2) values ('fo', 4)")
     (should
-     (equal (sqlite-select db "select * from test2")
+     (equal (sqlite-select db "select * from test2" nil 'full)
             '(("col1" "col2") ("fóo" 3) ("fóo" 3) ("fo" 4))))))
 
 (ert-deftest sqlite-numbers ()
@@ -117,7 +117,27 @@
       (sqlite-execute db (format "insert into test3 values (%d)" big))
       (should
        (equal
-        (cdr (sqlite-select db "select * from test3"))
+        (sqlite-select db "select * from test3")
         (list (list small) (list big)))))))
+
+(ert-deftest sqlite-param ()
+  (skip-unless (sqlite-available-p))
+  (let (db)
+    (setq db (sqlite-open))
+    (sqlite-execute
+     db "create table if not exists test4 (col1 text, col2 number)")
+    (sqlite-execute
+     db "insert into test4 values (?, ?)"
+     (list "foo" 1))
+    (should
+     (equal
+      (sqlite-select
+       db "select * from test4 where col2 = ?" '(1))
+      '(("foo" 1))))
+    (should
+     (equal
+      (sqlite-select
+       db "select * from test4 where col2 = ?" [1])
+      '(("foo" 1))))))
 
 ;;; sqlite-tests.el ends here

@@ -88,12 +88,23 @@ static const char *
 bind_values (sqlite3 *db, sqlite3_stmt *stmt, Lisp_Object values)
 {
   sqlite3_reset (stmt);
-  int len = ASIZE (values);
+  int len;
+  if (VECTORP (values))
+    len = ASIZE (values);
+  else
+    len = XFIXNUM (Flength (values));
 
   for (int i = 0; i < len; ++i)
     {
       int ret = SQLITE_MISMATCH;
-      Lisp_Object value = AREF (values, i);
+      Lisp_Object value;
+      if (VECTORP (values))
+	value = AREF (values, i);
+      else
+	{
+	  value = XCAR (values);
+	  values = XCDR (values);
+	}
       Lisp_Object type = Ftype_of (value);
 
       if (EQ (type, Qstring))
@@ -139,6 +150,8 @@ The number of affected rows is returned.  */)
 {
   CHECK_SQLITE (db);
   CHECK_STRING (query);
+  if (!(NILP (values) || CONSP (values) || VECTORP (values)))
+    xsignal1 (Qerror, build_string ("VALUES must be a list or a vector"));
 
   sqlite3 *sdb = XSQLITE (db)->db;
   char *sql, *tail;
@@ -245,7 +258,7 @@ row_to_value (sqlite3_stmt *stmt)
       values = Fcons (v, values);
     }
 
-  return Freverse (values);
+  return Fnreverse (values);
 }
 
 DEFUN ("sqlite-select", Fsqlite_select, Ssqlite_select, 2, 4, 0,
@@ -255,12 +268,19 @@ parametrised statement.
 
 By default, the return value is a list where the first element is a
 list of column names, and the rest of the elements are the matching data.
-If CURSOR is non-nil, an opaque object is returned instead that can
-be queried with `sqlite-next' and other functions to get the data.  */)
-  (Lisp_Object db, Lisp_Object query, Lisp_Object values, Lisp_Object cursor)
+
+RETURN-TYPE can be either nil (which means that the matching data
+should be returned as a list of rows), or `full' (the same, but the
+first element in the return list will be the column names), or `set',
+which means that we return a set object that can be queried with
+`sqlite-next' and other functions to get the data.  */)
+  (Lisp_Object db, Lisp_Object query, Lisp_Object values,
+   Lisp_Object return_type)
 {
   CHECK_SQLITE (db);
   CHECK_STRING (query);
+  if (!(NILP (values) || CONSP (values) || VECTORP (values)))
+    xsignal1 (Qerror, build_string ("VALUES must be a list or a vector"));
 
   sqlite3 *sdb = XSQLITE (db)->db;
   Lisp_Object retval = Qnil;
@@ -290,13 +310,17 @@ be queried with `sqlite-next' and other functions to get the data.  */)
 
   /* Get the field names.  */
   Lisp_Object columns = Qnil;
-  int count = sqlite3_column_count (stmt);
-  for (int i = 0; i < count; ++i)
-    columns = Fcons (build_string (sqlite3_column_name (stmt, i)), columns);
+  if (EQ (return_type, Qset)
+      || EQ (return_type, Qfull))
+    {
+      int count = sqlite3_column_count (stmt);
+      for (int i = 0; i < count; ++i)
+	columns = Fcons (build_string (sqlite3_column_name (stmt, i)), columns);
 
-  columns = Fnreverse (columns);
+      columns = Fnreverse (columns);
+    }
 
-  if (!NILP (cursor))
+  if (EQ (return_type, Qset))
     {
       retval = make_sqlite (true, db, stmt, columns);
       goto exit;
@@ -307,7 +331,10 @@ be queried with `sqlite-next' and other functions to get the data.  */)
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
     data = Fcons (row_to_value (stmt), data);
 
-  retval = Fcons (columns, Fnreverse (data));
+  if (EQ (return_type, Qfull))
+    retval = Fcons (columns, Fnreverse (data));
+  else
+    retval = Fnreverse (data);
   sqlite3_finalize (stmt);
 
  exit:
@@ -451,6 +478,8 @@ syms_of_sqlite (void)
   defsubr (&Ssqlite_next);
   defsubr (&Ssqlite_columns);
   defsubr (&Ssqlite_more_p);
+  DEFSYM (Qset, "set");
+  DEFSYM (Qfull, "full");
 #endif
   defsubr (&Ssqlitep);
   DEFSYM (Qsqlitep, "sqlitep");
