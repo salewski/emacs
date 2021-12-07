@@ -170,6 +170,43 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 ;; (sticky--set-value foo 'zot)
 ;; (setf (sticky-value foo) 'gazonk)
 
+(defvar-keymap sticky-edit-mode-map
+  "d" #'sticky-delete-value)
+
+(define-derived-mode sticky-edit-mode special-mode "Sticky"
+  "This mode lists all elements in the \"sticky\" database."
+  :interactive nil
+  (buffer-disable-undo)
+  (setq-local buffer-read-only t))
+
+;;;###autoload
+(defun list-sticky-values ()
+  "List all values in the \"sticky\" database."
+  (interactive)
+  (sticky--ensure-db)
+  (pop-to-buffer (get-buffer-create "*Sticky*"))
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (cl-loop for (package key value) in (sqlite-select
+                                         sticky--db
+                                         "select package, key, value from sticky order by package, key")
+             do (insert (propertize (format "%s %s %s\n"
+                                            package key value)
+                                    'sticky--id (list package key))))
+    (goto-char (point-min)))
+  (sticky-edit-mode))
+
+(defun sticky-delete-value (id)
+  "Delete the value at point."
+  (interactive (list (get-text-property (point) 'sticky--id)) sticky-edit-mode)
+  (unless id
+    (error "No value on the current line"))
+  (sqlite-execute sticky--db "delete from sticky where package = ? and key = ?"
+                  id)
+  (let ((inhibit-read-only t))
+    (beginning-of-line)
+    (delete-region (point) (progn (forward-line 1) (point)))))
+
 (provide 'sticky)
 
 ;;; sticky.el ends here
