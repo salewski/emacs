@@ -608,7 +608,6 @@ DEFUN ("sqlite-available-p", Fsqlite_available_p, Ssqlite_available_p, 0, 0, 0,
     return XCDR (found);
   else
     {
-      Lisp_Object status;
       HMODULE library;
 
       if (!(library = w32_delayed_load (Qsqlite)))
@@ -627,7 +626,6 @@ DEFUN ("sqlite-available-p", Fsqlite_available_p, Ssqlite_available_p, 0, 0, 0,
  bad_library:
   Vlibrary_cache = Fcons (Fcons (Qsqlite, Qnil), Vlibrary_cache);
       return Qnil;
-    }
 # else
   return Qt;
 #endif
