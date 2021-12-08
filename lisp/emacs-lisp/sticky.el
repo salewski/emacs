@@ -27,6 +27,13 @@
 (require 'eieio)
 (require 'sqlite)
 
+(defcustom sticky-database-file
+  (expand-file-name "sticky.sqlite3" user-emacs-directory)
+  "File to store sticky variables."
+  :type 'file
+  :version "29.1"
+  :group 'files)
+
 (defmacro define-sticky-variable (name initial-value &optional doc
                                        &rest args)
   "Make NAME into a sticky variable initialized from INITIAL-VALUE.
@@ -67,8 +74,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (defun sticky--ensure-db ()
   (unless sticky--db
-    (setq sticky--db
-          (sqlite-open (expand-file-name "sticky.sqlite" "~/.emacs.d/"))))
+    (setq sticky--db (sqlite-open sticky-database-file)))
   (with-sqlite-transaction sticky--db
     (unless (sqlite-select
              sticky--db

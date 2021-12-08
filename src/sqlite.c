@@ -423,7 +423,9 @@ MODULE should be the file name of an SQlite module .so file.  */)
   CHECK_STRING (module);
 
   sqlite3 *sdb = XSQLITE (db)->db;
-  int result = sqlite3_load_extension (sdb, SSDATA (module), NULL, NULL);
+  int result = sqlite3_load_extension (sdb,
+				       SSDATA (Fexpand_file_name (module, Qnil)),
+				       NULL, NULL);
   if (result ==  SQLITE_OK)
     return Qt;
   return Qnil;
