@@ -141,7 +141,47 @@ load_dll_functions (HMODULE library)
   LOAD_DLL_FN (library, sqlite3_load_extension);
   return true;
 }
+
+static bool
+sqlite_loaded_p (void)
+{
+  Lisp_Object found = Fassq (Qsqlite3, Vlibrary_cache);
+
+  return CONSP (found) && EQ (XCDR (found), Qt);
+}
 #endif /* WINDOWSNT */
+
+static bool
+init_sqlite_functions (void)
+{
+#ifdef WINDOWSNT
+  if (sqlite_loaded_p ())
+    return true;
+  else
+    {
+      HMODULE library;
+
+      if (!(library = w32_delayed_load (Qsqlite3)))
+	{
+	  message1 ("sqlite3 library not found");
+	  return false;
+	}
+
+      if (! load_dll_functions (library))
+	goto bad_library;
+
+      Vlibrary_cache = Fcons (Fcons (Qxqlite3, Qt), Vlibrary_cache);
+      return true;
+    }
+
+ bad_library:
+  Vlibrary_cache = Fcons (Fcons (Qsqlite3, Qnil), Vlibrary_cache);
+
+  return false;
+#else  /* !WINDOWSNT */
+  return true;
+#endif	/* !WINDOWSNT */
+}
 
 
 static void
@@ -199,6 +239,7 @@ If FILE is nil, an in-memory database will be opened instead.  */)
   (Lisp_Object file)
 {
   char *name;
+  init_sqlite_functions ();
 
   if (!NILP (file))
     {
@@ -603,29 +644,16 @@ DEFUN ("sqlite-available-p", Fsqlite_available_p, Ssqlite_available_p, 0, 0, 0,
 {
 #ifdef HAVE_SQLITE3
 # ifdef WINDOWSNT
-  Lisp_Object found = Fassq (Qsqlite, Vlibrary_cache);
+  Lisp_Object found = Fassq (Qsqlite3, Vlibrary_cache);
   if (CONSP (found))
     return XCDR (found);
   else
     {
-      HMODULE library;
-
-      if (!(library = w32_delayed_load (Qsqlite)))
-	{
-	  message1 ("sqlite library not found");
-	  return Qnil;
-	}
-
-      if (! load_dll_functions (library))
-	goto bad_library;
-
-      Vlibrary_cache = Fcons (Fcons (Qsqlite, Qt), Vlibrary_cache);
-      return Qt;
+      Lisp_Object status;
+      status = init_sqlite_functions () ? Qt : Qnil;
+      Vlibrary_cache = Fcons (Fcons (Qsqlite3, status), Vlibrary_cache);
+      return status;
     }
-
- bad_library:
-  Vlibrary_cache = Fcons (Fcons (Qsqlite, Qnil), Vlibrary_cache);
-      return Qnil;
 # else
   return Qt;
 #endif
@@ -657,4 +685,5 @@ syms_of_sqlite (void)
   defsubr (&Ssqlite_available_p);
   DEFSYM (Qfalse, "false");
   DEFSYM (Qsqlite, "sqlite");
+  DEFSYM (Qsqlite3, "sqlite3");
 }
