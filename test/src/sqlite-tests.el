@@ -161,4 +161,15 @@
     (should (sqlite-select db1 "select * from test6"))
     (should-not (sqlite-select db2 "select * from test6"))))
 
+(ert-deftest sqlite-close-dbs ()
+  (skip-unless (sqlite-available-p))
+  (let (db)
+    (setq db (sqlite-open))
+    (sqlite-execute
+     db "create table if not exists test6 (col1 text, col2 number)")
+    (sqlite-execute db "insert into test6 values (?, ?)" '("foo" 2))
+    (should (sqlite-select db "select * from test6"))
+    (sqlite-close db)
+    (should-error (sqlite-select db "select * from test6"))))
+
 ;;; sqlite-tests.el ends here

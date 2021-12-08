@@ -65,6 +65,18 @@ make_sqlite (bool is_statement, void *db, void *stmt, char *name)
   return make_lisp_ptr (ptr, Lisp_Vectorlike);
 }
 
+static void
+check_sqlite (Lisp_Object db, bool is_statement)
+{
+  CHECK_SQLITE (db);
+  if (is_statement && !XSQLITE (db)->is_statement)
+    xsignal1 (Qerror, build_string ("Invalid set object"));
+  else if (!is_statement && XSQLITE (db)->is_statement)
+    xsignal1 (Qerror, build_string ("Invalid database object"));
+  if (!XSQLITE (db)->db)
+    xsignal1 (Qerror, build_string ("Database closed"));
+}
+
 static int db_count = 0;
 
 DEFUN ("sqlite-open", Fsqlite_open, Ssqlite_open, 0, 1, 0,
@@ -101,6 +113,16 @@ If FILE is nil, an in-memory database will be opened instead.  */)
     return Qnil;
 
   return make_sqlite (false, sdb, NULL, name);
+}
+
+DEFUN ("sqlite-close", Fsqlite_close, Ssqlite_close, 1, 1, 0,
+       doc: /* Close the database DB.  */)
+  (Lisp_Object db)
+{
+  check_sqlite (db, false);
+  sqlite3_close (XSQLITE (db)->db);
+  XSQLITE (db)->db = NULL;
+  return Qnil;
 }
 
 /* Bind values in a statement like
@@ -170,7 +192,7 @@ executing a statement like
 The number of affected rows is returned.  */)
   (Lisp_Object db, Lisp_Object query, Lisp_Object values)
 {
-  CHECK_SQLITE (db);
+  check_sqlite (db, false);
   CHECK_STRING (query);
   if (!(NILP (values) || CONSP (values) || VECTORP (values)))
     xsignal1 (Qerror, build_string ("VALUES must be a list or a vector"));
@@ -298,8 +320,9 @@ which means that we return a set object that can be queried with
   (Lisp_Object db, Lisp_Object query, Lisp_Object values,
    Lisp_Object return_type)
 {
-  CHECK_SQLITE (db);
+  check_sqlite (db, false);
   CHECK_STRING (query);
+
   if (!(NILP (values) || CONSP (values) || VECTORP (values)))
     xsignal1 (Qerror, build_string ("VALUES must be a list or a vector"));
 
@@ -370,7 +393,7 @@ DEFUN ("sqlite-transaction", Fsqlite_transaction, Ssqlite_transaction, 1, 1, 0,
        doc: /* Start a transaction in DB.  */)
   (Lisp_Object db)
 {
-  CHECK_SQLITE (db);
+  check_sqlite (db, false);
   return sqlite_exec (XSQLITE (db)->db, "begin");
 }
 
@@ -378,7 +401,7 @@ DEFUN ("sqlite-commit", Fsqlite_commit, Ssqlite_commit, 1, 1, 0,
        doc: /* Commit a transaction in DB.  */)
   (Lisp_Object db)
 {
-  CHECK_SQLITE (db);
+  check_sqlite (db, false);
   return sqlite_exec (XSQLITE (db)->db, "commit");
 }
 
@@ -386,7 +409,7 @@ DEFUN ("sqlite-rollback", Fsqlite_rollback, Ssqlite_rollback, 1, 1, 0,
        doc: /* Roll back a transaction in DB.  */)
   (Lisp_Object db)
 {
-  CHECK_SQLITE (db);
+  check_sqlite (db, false);
   return sqlite_exec (XSQLITE (db)->db, "rollback");
 }
 
@@ -396,7 +419,7 @@ DEFUN ("sqlite-load-extension", Fsqlite_load_extension,
 MODULE should be the file name of an SQlite module .so file.  */)
   (Lisp_Object db, Lisp_Object module)
 {
-  CHECK_SQLITE (db);
+  check_sqlite (db, false);
   CHECK_STRING (module);
 
   sqlite3 *sdb = XSQLITE (db)->db;
@@ -410,9 +433,7 @@ DEFUN ("sqlite-next", Fsqlite_next, Ssqlite_next, 1, 1, 0,
        doc: /* Return the next result set from SET.  */)
   (Lisp_Object set)
 {
-  CHECK_SQLITE (set);
-  if (!XSQLITE (set)->is_statement)
-    xsignal1 (Qerror, build_string ("Invalid set object"));
+  check_sqlite (set, true);
 
   int ret = sqlite3_step (XSQLITE (set)->stmt);
   if (ret != SQLITE_ROW && ret != SQLITE_OK && ret != SQLITE_DONE)
@@ -431,10 +452,7 @@ DEFUN ("sqlite-columns", Fsqlite_columns, Ssqlite_columns, 1, 1, 0,
        doc: /* Return the column names of SET.  */)
   (Lisp_Object set)
 {
-  CHECK_SQLITE (set);
-  if (!XSQLITE (set)->is_statement)
-    xsignal1 (Qerror, build_string ("Invalid set object"));
-
+  check_sqlite (set, true);
   return column_names (XSQLITE (set)->stmt);
 }
 
@@ -442,9 +460,7 @@ DEFUN ("sqlite-more-p", Fsqlite_more_p, Ssqlite_more_p, 1, 1, 0,
        doc: /* Say whether there's any further results in SET.  */)
   (Lisp_Object set)
 {
-  CHECK_SQLITE (set);
-  if (!XSQLITE (set)->is_statement)
-    xsignal1 (Qerror, build_string ("Invalid set object"));
+  check_sqlite (set, true);
 
   if (XSQLITE (set)->eof)
     return Qnil;
@@ -481,6 +497,7 @@ syms_of_sqlite (void)
 {
 #ifdef HAVE_SQLITE3
   defsubr (&Ssqlite_open);
+  defsubr (&Ssqlite_close);
   defsubr (&Ssqlite_execute);
   defsubr (&Ssqlite_select);
   defsubr (&Ssqlite_transaction);
