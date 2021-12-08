@@ -30,6 +30,120 @@ YOSHIDA <syohex@gmail.com>, which can be found at:
 
 #include <sqlite3.h>
 
+#ifdef WINDOWSNT
+
+# include <windows.h>
+# include "w32common.h"
+# include "w32.h"
+
+DEF_DLL_FN (SQLITE_API int, sqlite3_finalize, (sqlite3_stmt *));
+DEF_DLL_FN (SQLITE_API int, sqlite3_close, (sqlite3*));
+DEF_DLL_FN (SQLITE_API int, sqlite3_open_v2,
+	    (const char *, sqlite3 **, int, const char*));
+DEF_DLL_FN (SQLITE_API int, sqlite3_reset, (sqlite3_stmt*));
+DEF_DLL_FN (SQLITE_API int, sqlite3_bind_text,
+	    (sqlite3_stmt*, int, const char*, int, void(*)(void*)));
+DEF_DLL_FN (SQLITE_API int, sqlite3_bind_int64,
+	    (sqlite3_stmt*, int, sqlite3_int64));
+DEF_DLL_FN (SQLITE_API int, sqlite3_bind_double, (sqlite3_stmt*, int, double));
+DEF_DLL_FN (SQLITE_API int, sqlite3_bind_null, (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API int, sqlite3_bind_int, (sqlite3_stmt*, int, int));
+DEF_DLL_FN (SQLITE_API const char *, sqlite3_errmsg, (sqlite3*));
+DEF_DLL_FN (SQLITE_API int, sqlite3_step, (sqlite3_stmt*));
+DEF_DLL_FN (SQLITE_API int, sqlite3_changes, (sqlite3*));
+DEF_DLL_FN (SQLITE_API int, sqlite3_column_count, (sqlite3_stmt*));
+DEF_DLL_FN (SQLITE_API int, sqlite3_column_type, (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API sqlite3_int64, sqlite3_column_int64,
+	    (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API double, sqlite3_column_double, (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API const void *, sqlite3_column_blob,
+	    (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API int, sqlite3_column_bytes, (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API const unsigned char *, sqlite3_column_text,
+	    (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API const char *, sqlite3_column_name, (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API int, sqlite3_exec,
+	    (sqlite3*, const char *, int (*callback)(void*,int,char**,char**),
+	     void *, char **));
+DEF_DLL_FN (SQLITE_API int, sqlite3_load_extension,
+	    (sqlite3 *, const char *, const char *, char **));
+
+# undef sqlite3_finalize
+# undef sqlite3_close
+# undef sqlite3_open_v2
+# undef sqlite3_reset
+# undef sqlite3_bind_text
+# undef sqlite3_bind_int64
+# undef sqlite3_bind_double
+# undef sqlite3_bind_null
+# undef sqlite3_bind_int
+# undef sqlite3_errmsg
+# undef sqlite3_step
+# undef sqlite3_changes
+# undef sqlite3_column_count
+# undef sqlite3_column_type
+# undef sqlite3_column_int64
+# undef sqlite3_column_double
+# undef sqlite3_column_blob
+# undef sqlite3_column_bytes
+# undef sqlite3_column_text
+# undef sqlite3_column_name
+# undef sqlite3_exec
+# undef sqlite3_load_extension
+
+# define sqlite3_finalize fn_sqlite3_finalize
+# define sqlite3_close fn_sqlite3_close
+# define sqlite3_open_v2 fn_sqlite3_open_v2
+# define sqlite3_reset fn_sqlite3_reset
+# define sqlite3_bind_text fn_sqlite3_bind_text
+# define sqlite3_bind_int64 fn_sqlite3_bind_int64
+# define sqlite3_bind_double fn_sqlite3_bind_double
+# define sqlite3_bind_null fn_sqlite3_bind_null
+# define sqlite3_bind_int fn_sqlite3_bind_int
+# define sqlite3_errmsg fn_sqlite3_errmsg
+# define sqlite3_step fn_sqlite3_step
+# define sqlite3_changes fn_sqlite3_changes
+# define sqlite3_column_count fn_sqlite3_column_count
+# define sqlite3_column_type fn_sqlite3_column_type
+# define sqlite3_column_int64 fn_sqlite3_column_int64
+# define sqlite3_column_double fn_sqlite3_column_double
+# define sqlite3_column_blob fn_sqlite3_column_blob
+# define sqlite3_column_bytes fn_sqlite3_column_bytes
+# define sqlite3_column_text fn_sqlite3_column_text
+# define sqlite3_column_name fn_sqlite3_column_name
+# define sqlite3_exec fn_sqlite3_exec
+# define sqlite3_load_extension fn_sqlite3_load_extension
+
+static bool
+load_dll_functions (HMODULE library)
+{
+  LOAD_DLL_FN (library, sqlite3_finalize);
+  LOAD_DLL_FN (library, sqlite3_close);
+  LOAD_DLL_FN (library, sqlite3_open_v2);
+  LOAD_DLL_FN (library, sqlite3_reset);
+  LOAD_DLL_FN (library, sqlite3_bind_text);
+  LOAD_DLL_FN (library, sqlite3_bind_int64);
+  LOAD_DLL_FN (library, sqlite3_bind_double);
+  LOAD_DLL_FN (library, sqlite3_bind_null);
+  LOAD_DLL_FN (library, sqlite3_bind_int);
+  LOAD_DLL_FN (library, sqlite3_errmsg);
+  LOAD_DLL_FN (library, sqlite3_step);
+  LOAD_DLL_FN (library, sqlite3_changes);
+  LOAD_DLL_FN (library, sqlite3_column_count);
+  LOAD_DLL_FN (library, sqlite3_column_type);
+  LOAD_DLL_FN (library, sqlite3_column_int64);
+  LOAD_DLL_FN (library, sqlite3_column_double);
+  LOAD_DLL_FN (library, sqlite3_column_blob);
+  LOAD_DLL_FN (library, sqlite3_column_bytes);
+  LOAD_DLL_FN (library, sqlite3_column_text);
+  LOAD_DLL_FN (library, sqlite3_column_name);
+  LOAD_DLL_FN (library, sqlite3_exec);
+  LOAD_DLL_FN (library, sqlite3_load_extension);
+  return true;
+}
+#endif /* WINDOWSNT */
+
+
 static void
 sqlite_free (void *arg)
 {
@@ -488,7 +602,35 @@ DEFUN ("sqlite-available-p", Fsqlite_available_p, Ssqlite_available_p, 0, 0, 0,
   (void)
 {
 #ifdef HAVE_SQLITE3
+# ifdef WINDOWSNT
+  Lisp_Object found = Fassq (Qsqlite, Vlibrary_cache);
+  if (CONSP (found))
+    return XCDR (found);
+  else
+    {
+      Lisp_Object status;
+      HMODULE library;
+
+      if (!(library = w32_delayed_load (Qsqlite)))
+	{
+	  message1 ("sqlite library not found");
+	  return Qnil;
+	}
+
+      if (! load_dll_functions (library))
+	goto bad_library;
+
+      Vlibrary_cache = Fcons (Fcons (Qsqlite, Qt), Vlibrary_cache);
+      return Qt;
+    }
+
+ bad_library:
+  Vlibrary_cache = Fcons (Fcons (Qsqlite, Qnil), Vlibrary_cache);
+      return Qnil;
+    }
+# else
   return Qt;
+#endif
 #else
   return Qnil;
 #endif
