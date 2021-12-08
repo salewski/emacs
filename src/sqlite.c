@@ -170,7 +170,7 @@ init_sqlite_functions (void)
       if (! load_dll_functions (library))
 	goto bad_library;
 
-      Vlibrary_cache = Fcons (Fcons (Qxqlite3, Qt), Vlibrary_cache);
+      Vlibrary_cache = Fcons (Fcons (Qsqlite3, Qt), Vlibrary_cache);
       return true;
     }
 
