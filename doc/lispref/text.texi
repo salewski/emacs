@@ -5255,6 +5255,11 @@ End a transaction and write the data out.
 End a transaction and discard any changes that have been made.
 @end defun
 
+@defmac with-sqlite-transaction db &body body
+Like @code{progn}, but executes @var{body} with a transaction held,
+and do a commit at the end.
+@end defmac
+
 @defun sqlite-load-extension db module
 Load an extension into @var{db}.  Extensions are usually @file{.so} files.
 @end defun
