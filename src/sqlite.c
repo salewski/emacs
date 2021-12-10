@@ -69,7 +69,6 @@ DEF_DLL_FN (SQLITE_API int, sqlite3_load_extension,
 	    (sqlite3*, const char*, const char*, char**));
 DEF_DLL_FN (SQLITE_API int, sqlite3_prepare_v2,
 	    (sqlite3*, const char*, int, sqlite3_stmt**, const char**));
-);
 
 # undef sqlite3_finalize
 # undef sqlite3_close
