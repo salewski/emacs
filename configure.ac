@@ -2685,12 +2685,16 @@ fi
 ### Use -lsqlite3 if available, unless '--with-sqlite3=no'
 HAVE_SQLITE3=no
 if test "${with_sqlite3}" != "no"; then
-   AC_CHECK_LIB(sqlite3, sqlite3_finalize, HAVE_SQLITE3=yes, HAVE_SQLITE3=no)
-   if test $HAVE_SQLITE3 = yes; then
+   AC_CHECK_LIB(sqlite3, sqlite3_open_v2, HAVE_SQLITE3=yes, HAVE_SQLITE3=no)
+   if test "$HAVE_SQLITE3" = "yes"; then
      SQLITE3_LIBS=-lsqlite3
      AC_SUBST(SQLITE3_LIBS)
      LIBS="$SQLITE3_LIBS $LIBS"
      AC_DEFINE(HAVE_SQLITE3, 1, [Define to 1 if you have the libsqlite3 library (-lsqlite).])
+     # Windows loads libwebp dynamically
+     if test "${opsys}" = "mingw32"; then
+        SQLITE3_LIBS=
+     fi
    fi
 fi
 
