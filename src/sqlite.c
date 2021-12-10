@@ -227,6 +227,7 @@ make_sqlite (bool is_statement, void *db, void *stmt, char *name)
 static void
 check_sqlite (Lisp_Object db, bool is_statement)
 {
+  init_sqlite_functions ();
   CHECK_SQLITE (db);
   if (is_statement && !XSQLITE (db)->is_statement)
     xsignal1 (Qerror, build_string ("Invalid set object"));
