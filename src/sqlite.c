@@ -36,10 +36,10 @@ YOSHIDA <syohex@gmail.com>, which can be found at:
 # include "w32common.h"
 # include "w32.h"
 
-DEF_DLL_FN (SQLITE_API int, sqlite3_finalize, (sqlite3_stmt *));
+DEF_DLL_FN (SQLITE_API int, sqlite3_finalize, (sqlite3_stmt*));
 DEF_DLL_FN (SQLITE_API int, sqlite3_close, (sqlite3*));
 DEF_DLL_FN (SQLITE_API int, sqlite3_open_v2,
-	    (const char *, sqlite3 **, int, const char*));
+	    (const char*, sqlite3**, int, const char*));
 DEF_DLL_FN (SQLITE_API int, sqlite3_reset, (sqlite3_stmt*));
 DEF_DLL_FN (SQLITE_API int, sqlite3_bind_text,
 	    (sqlite3_stmt*, int, const char*, int, void(*)(void*)));
@@ -48,7 +48,7 @@ DEF_DLL_FN (SQLITE_API int, sqlite3_bind_int64,
 DEF_DLL_FN (SQLITE_API int, sqlite3_bind_double, (sqlite3_stmt*, int, double));
 DEF_DLL_FN (SQLITE_API int, sqlite3_bind_null, (sqlite3_stmt*, int));
 DEF_DLL_FN (SQLITE_API int, sqlite3_bind_int, (sqlite3_stmt*, int, int));
-DEF_DLL_FN (SQLITE_API const char *, sqlite3_errmsg, (sqlite3*));
+DEF_DLL_FN (SQLITE_API const char*, sqlite3_errmsg, (sqlite3*));
 DEF_DLL_FN (SQLITE_API int, sqlite3_step, (sqlite3_stmt*));
 DEF_DLL_FN (SQLITE_API int, sqlite3_changes, (sqlite3*));
 DEF_DLL_FN (SQLITE_API int, sqlite3_column_count, (sqlite3_stmt*));
@@ -56,19 +56,19 @@ DEF_DLL_FN (SQLITE_API int, sqlite3_column_type, (sqlite3_stmt*, int));
 DEF_DLL_FN (SQLITE_API sqlite3_int64, sqlite3_column_int64,
 	    (sqlite3_stmt*, int));
 DEF_DLL_FN (SQLITE_API double, sqlite3_column_double, (sqlite3_stmt*, int));
-DEF_DLL_FN (SQLITE_API const void *, sqlite3_column_blob,
+DEF_DLL_FN (SQLITE_API const void*, sqlite3_column_blob,
 	    (sqlite3_stmt*, int));
 DEF_DLL_FN (SQLITE_API int, sqlite3_column_bytes, (sqlite3_stmt*, int));
-DEF_DLL_FN (SQLITE_API const unsigned char *, sqlite3_column_text,
+DEF_DLL_FN (SQLITE_API const unsigned char*, sqlite3_column_text,
 	    (sqlite3_stmt*, int));
-DEF_DLL_FN (SQLITE_API const char *, sqlite3_column_name, (sqlite3_stmt*, int));
+DEF_DLL_FN (SQLITE_API const char*, sqlite3_column_name, (sqlite3_stmt*, int));
 DEF_DLL_FN (SQLITE_API int, sqlite3_exec,
-	    (sqlite3*, const char *, int (*callback)(void*,int,char**,char**),
-	     void *, char **));
+	    (sqlite3*, const char*, int (*callback)(void*,int,char**,char**),
+	     void*, char**));
 DEF_DLL_FN (SQLITE_API int, sqlite3_load_extension,
-	    (sqlite3 *, const char *, const char *, char **));
-DEF_DLL_FN (SQLITE_API int, sqlite3_prepare_v2
-	    (sqlite3 *, const char *, int, sqlite3_stmt **, const char ** ));
+	    (sqlite3*, const char*, const char*, char**));
+DEF_DLL_FN (SQLITE_API int, sqlite3_prepare_v2,
+	    (sqlite3*, const char*, int, sqlite3_stmt**, const char**));
 );
 
 # undef sqlite3_finalize
