@@ -60,7 +60,7 @@ the character after point.
 * Base 64::          Conversion to or from base 64 encoding.
 * Checksum/Hash::    Computing cryptographic hashes.
 * GnuTLS Cryptography:: Cryptographic algorithms imported from GnuTLS.
-* Database::         Interacting with an SQL databsae.
+* Database::         Interacting with an SQL database.
 * Parsing HTML/XML:: Parsing HTML and XML.
 * Parsing JSON::     Parsing and generating JSON values.
 * JSONRPC::          JSON Remote Procedure Call protocol
