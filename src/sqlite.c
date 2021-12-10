@@ -67,6 +67,9 @@ DEF_DLL_FN (SQLITE_API int, sqlite3_exec,
 	     void *, char **));
 DEF_DLL_FN (SQLITE_API int, sqlite3_load_extension,
 	    (sqlite3 *, const char *, const char *, char **));
+DEF_DLL_FN (SQLITE_API int, sqlite3_prepare_v2
+	    (sqlite3 *, const char *, int, sqlite3_stmt **, const char ** ));
+);
 
 # undef sqlite3_finalize
 # undef sqlite3_close
@@ -90,6 +93,7 @@ DEF_DLL_FN (SQLITE_API int, sqlite3_load_extension,
 # undef sqlite3_column_name
 # undef sqlite3_exec
 # undef sqlite3_load_extension
+# undef sqlite3_prepare_v2
 
 # define sqlite3_finalize fn_sqlite3_finalize
 # define sqlite3_close fn_sqlite3_close
@@ -113,6 +117,7 @@ DEF_DLL_FN (SQLITE_API int, sqlite3_load_extension,
 # define sqlite3_column_name fn_sqlite3_column_name
 # define sqlite3_exec fn_sqlite3_exec
 # define sqlite3_load_extension fn_sqlite3_load_extension
+# define sqlite3_prepare_v2 fn_sqlite3_prepare_v2
 
 static bool
 load_dll_functions (HMODULE library)
@@ -139,6 +144,7 @@ load_dll_functions (HMODULE library)
   LOAD_DLL_FN (library, sqlite3_column_name);
   LOAD_DLL_FN (library, sqlite3_exec);
   LOAD_DLL_FN (library, sqlite3_load_extension);
+  LOAD_DLL_FN (library, sqlite3_prepare_v2);
   return true;
 }
 
