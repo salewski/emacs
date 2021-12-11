@@ -233,8 +233,10 @@ check_sqlite (Lisp_Object db, bool is_statement)
     xsignal1 (Qerror, build_string ("Invalid set object"));
   else if (!is_statement && XSQLITE (db)->is_statement)
     xsignal1 (Qerror, build_string ("Invalid database object"));
-  if (!XSQLITE (db)->db)
+  if (!is_statement && !XSQLITE (db)->db)
     xsignal1 (Qerror, build_string ("Database closed"));
+  else if (is_statement && !XSQLITE (db)->db)
+    xsignal1 (Qerror, build_string ("Statement closed"));
 }
 
 static int db_count = 0;
@@ -631,6 +633,16 @@ DEFUN ("sqlite-more-p", Fsqlite_more_p, Ssqlite_more_p, 1, 1, 0,
     return Qt;
 }
 
+DEFUN ("sqlite-finalize", Fsqlite_finalize, Ssqlite_finalize, 1, 1, 0,
+       doc: /* Mark this SET as being finished.
+This will free the resources held by SET.  */)
+  (Lisp_Object set)
+{
+  check_sqlite (set, true);
+  sqlite3_finalize (XSQLITE (set)->stmt);
+  return Qt;
+}
+
 #endif /* HAVE_SQLITE3 */
 
 DEFUN ("sqlitep", Fsqlitep, Ssqlitep, 1, 1, 0,
@@ -683,6 +695,7 @@ syms_of_sqlite (void)
   defsubr (&Ssqlite_next);
   defsubr (&Ssqlite_columns);
   defsubr (&Ssqlite_more_p);
+  defsubr (&Ssqlite_finalize);
   DEFSYM (Qset, "set");
   DEFSYM (Qfull, "full");
 #endif

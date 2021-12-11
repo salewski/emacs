@@ -5151,7 +5151,7 @@ When SQLite support is available, the following functions can be used.
 @defun sqlite-open &optional file
 This function opens @var{file} as a database file.  If it doesn't
 exist, a new database will be created and stored there.  If this
-argument is missing or @code{nil}, an in-memory database is created
+argument is missing or @code{nil}, a new in-memory database is created
 instead.
 
 The return value is a @dfn{database object} that can be used as the
@@ -5189,7 +5189,9 @@ This has exactly the same effect as the first form, but is more
 efficient and safer (because it doesn't involve any string parsing or
 interpolation).
 
-The number of affected rows is returned.
+The number of affected rows is returned.  For instance, an
+@samp{insert} statement will return @samp{1}, but an @samp{update}
+statement may return zero or a higher number.
 @end defun
 
 @defun sqlite-select db query &optional values result-type
@@ -5204,7 +5206,7 @@ As with the @code{sqlite-execute} command, you can pass in a list or a
 vector of values that will be bound before executing the select:
 
 @lisp
-(sqlite-select db "select * from foo where key = ?" '(2))
+(sqlite-select db "select * from foo where key = ?" [2])
   @result{} (("bar" 2))
 @end lisp
 
@@ -5218,7 +5220,10 @@ the first element in the return value.
 If @var{return-type} is @code{set}, this function will return a
 @dfn{statement object} instead.  This object can be interrogated by
 the @code{sqlite-next}, @code{sqlite-columns} and @code{sqlite-more-p}
-functions.
+functions.  If the result set is small, it's often more convenient to
+just return the data directly, but if the result set is large (or if
+you won't be using all the data from the set), using the @code{set}
+method will allocate a lot less data, and therefore be more efficient.
 @end defun
 
 @defun sqlite-next statement
@@ -5234,11 +5239,23 @@ This function returns the next row in the result set returned by
 @defun sqlite-columns statement
 This function returns the column names of the result set returned by
 @code{sqlite-select}.
+
+@lisp
+(sqlite-columns stmt)
+    @result{} ("name" "issue")
+@end lisp
 @end defun
 
 @defun sqlite-more-p statement
 This predicate says whether there is more data to be fetched in the
 result set returned by @code{sqlite-select}.
+@end defun
+
+@defun sqlite-finalize statement
+If @var{statement} is not going to be used any more, calling this
+function will free the resources bound by @var{statement}.  This is
+usually not necessary---when the statement object is
+garbage-collected, this will happen automatically.
 @end defun
 
 @defun sqlite-transaction db
@@ -5248,7 +5265,7 @@ been committed.
 @end defun
 
 @defun sqlite-commit db
-End a transaction and write the data out.
+End a transaction and write the data out to file.
 @end defun
 
 @defun sqlite-rollback db
