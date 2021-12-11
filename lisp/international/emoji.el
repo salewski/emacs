@@ -30,7 +30,7 @@
 (require 'cl-lib)
 (require 'cl-extra)
 (require 'transient)
-(require 'sticky)
+(require 'multisession)
 
 (defgroup emoji nil
   "Inserting Emojis."
@@ -60,7 +60,7 @@
 (defvar emoji--derived nil)
 (defvar emoji--names (make-hash-table :test #'equal))
 (defvar emoji--done-derived nil)
-(define-sticky-variable emoji--recent (list "😀" "😖"))
+(define-multisession-variable emoji--recent (list "😀" "😖"))
 (defvar emoji--insert-buffer)
 
 ;;;###autoload
@@ -84,7 +84,7 @@ of a visual interface."
   (unless (fboundp 'emoji--command-Emoji)
     (emoji--define-transient))
   (funcall (emoji--define-transient
-            (cons "Recent" (sticky-value emoji--recent)) t)))
+            (cons "Recent" (multisession-value emoji--recent)) t)))
 
 ;;;###autoload
 (defun emoji-search ()
@@ -530,17 +530,18 @@ character) under point is."
   (lambda ()
     (interactive)
     (funcall (emoji--define-transient
-              (cons "Recent" (sticky-value emoji--recent)) t end-function))))
+              (cons "Recent" (multisession-value emoji--recent))
+              t end-function))))
 
 (defun emoji--add-recent (glyph)
   "Add GLYPH to the set of recently used emojis."
-  (let ((recent (sticky-value emoji--recent)))
+  (let ((recent (multisession-value emoji--recent)))
     (setq recent (delete glyph recent))
     (push glyph recent)
     ;; Shorten the list.
     (when-let ((tail (nthcdr 30 recent)))
       (setcdr tail nil))
-    (setf (sticky-value emoji--recent) recent)))
+    (setf (multisession-value emoji--recent) recent)))
 
 (defun emoji--columnize (list columns)
   "Split LIST into COLUMN columns."
