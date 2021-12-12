@@ -50,7 +50,6 @@
                           (cl-incf (multisession-value foo))))))
           (should (= (multisession-value foo) 2)))
       (when (file-exists-p multisession-database-file)
-        ;;(delete-file multisession-database-file)
-        ))))
+        (delete-file multisession-database-file)))))
 
 ;;; multisession-tests.el ends here
