@@ -2831,7 +2831,7 @@ way to update a variable is to say, for instance:
 @end lisp
 
 If the multisession variable is synchronized, setting it may update
-the value.  For instance:
+the value first.  For instance:
 
 @lisp
 (incf (multisession-value foo-bar))
