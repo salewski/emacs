@@ -27,6 +27,8 @@
 (require 'eieio)
 (require 'sqlite)
 
+(define-error 'sqlite-locked-error "database locked")
+
 (defcustom multisession-database-file
   (expand-file-name "multisession.sqlite" user-emacs-directory)
   "File to store multisession variables."
@@ -74,21 +76,30 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (defun multisession--ensure-db ()
   (unless multisession--db
-    (setq multisession--db (sqlite-open multisession-database-file)))
-  (with-sqlite-transaction multisession--db
-    (unless (sqlite-select
-             multisession--db
-             "select name from sqlite_master where type='table' and name='multisession'")
-      ;; Create the table.
-      (sqlite-execute multisession--db "PRAGMA auto_vacuum = FULL")
-      (sqlite-execute
-       multisession--db
-       "create table multisession (package text not null, key text not null, sequence number not null default 1, value text not null)")
-      (sqlite-execute
-       multisession--db
-       "create unique index multisession_idx on multisession (package, key)"))))
+    (setq multisession--db (sqlite-open multisession-database-file))
+    (with-sqlite-transaction multisession--db
+      (unless (sqlite-select
+               multisession--db
+               "select name from sqlite_master where type = 'table' and name = 'multisession'")
+        ;; Create the table.
+        (sqlite-execute multisession--db "PRAGMA auto_vacuum = FULL")
+        (sqlite-execute
+         multisession--db
+         "create table multisession (package text not null, key text not null, sequence number not null default 1, value text not null)")
+        (sqlite-execute
+         multisession--db
+         "create unique index multisession_idx on multisession (package, key)")))))
 
 (defun multisession-value (object)
+  (catch 'done
+    (while t
+      (condition-case nil
+          (throw 'done (multisession-value-1 object))
+        (sqlite-locked-error
+         (message "Sleeping...")
+         (sleep-for 0.1))))))
+
+(defun multisession-value-1 (object)
   "Return the value of the multisession OBJECT."
   (if (or (null user-init-file)
           (not (sqlite-available-p)))
@@ -138,6 +149,15 @@ DOC should be a doc string, and ARGS are keywords as applicable to
         (multisession--cached-value object))))))
 
 (defun multisession--set-value (object value)
+  (catch 'done
+    (while t
+      (condition-case nil
+          (throw 'done (multisession--set-value-1 object value))
+        (sqlite-locked-error
+         (message "Sleeping...")
+         (sleep-for 0.1))))))
+
+(defun multisession--set-value-1 (object value)
   (if (or (null user-init-file)
           (not (sqlite-available-p)))
       ;; We have no backend, so just store the value.
