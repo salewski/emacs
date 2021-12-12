@@ -124,12 +124,12 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                (car
                 (sqlite-select
                  multisession--db
-                 "select value, sequence from multisession where sequence > 0 package = ? and key = ?"
+                 "select value, sequence from multisession where sequence > ? and package = ? and key = ?"
                  (cons (multisession--cached-sequence object) id)))))
           (if stored
-              (let ((value (read-from-string (caar stored))))
+              (let ((value (car (read-from-string (car stored)))))
                 (setf (multisession--cached-value object) value
-                      (multisession--cached-sequence object) (cadar stored))
+                      (multisession--cached-sequence object) (cadr stored))
                 value)
             ;; Nothing, return the cached value.
             (multisession--cached-value object))))
