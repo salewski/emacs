@@ -2783,12 +2783,12 @@ to be used, here's a small example:
 
 This defines the variable @code{foo-var} and binds it to a special
 multisession object which is initialized with the value @samp{0} (if
-it doesn't already exist from a previous session).  The
-@code{my-adder} function queries the user for a number, adds this to
+the variable doesn't already exist from a previous session).  The
+@code{my-adder} command queries the user for a number, adds this to
 the old (possibly saved value), and then saves the new value.
 
 This facility isn't meant to be used for huge data structures, but
-should be reasonably performant for most values.
+should be performant for most values.
 
 @defmac define-multisession-variable name initial-value &optional doc &rest args
 This macro defines @var{name} as a multisession variable, with using
@@ -2829,6 +2829,9 @@ way to update a variable is to say, for instance:
 @lisp
 (setf (multisession-value foo-bar) 'zot)
 @end lisp
+
+Only Emacs Lisp values that have a readable print syntax can be saved
+this way.
 
 If the multisession variable is synchronized, setting it may update
 the value first.  For instance:
