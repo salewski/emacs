@@ -2768,8 +2768,9 @@ URL library stores cookies in @file{~/.emacs.d/url/cookies}.
 For things in between these two extremes (i.e., configuration which
 goes in the startup file, and massive application state that goes into
 separate files), Emacs provides a facility to replicate data between
-sessions called @dfn{multisession variables}.  To give you an idea of
-how these are meant to be used, here's a small example:
+sessions called @dfn{multisession variables}.  (This may not be
+available on all systems.)  To give you an idea of how these are meant
+to be used, here's a small example:
 
 @lisp
 (define-multisession-variable foo-var 0)
@@ -2839,4 +2840,9 @@ the value.  For instance:
 This will first check whether the value has changed in a different
 Emacs instance, retrieve that value, and then add 1 to that value, and
 then store it.
+@end defun
+
+@defun list-multisession-values
+This function will pop up a new window that lists all multisession
+variables, and allows you to delete and edit them.
 @end defun
