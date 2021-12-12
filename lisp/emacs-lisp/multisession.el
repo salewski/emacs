@@ -28,7 +28,7 @@
 (require 'sqlite)
 
 (defcustom multisession-database-file
-  (expand-file-name "multisession.sqlite3" user-emacs-directory)
+  (expand-file-name "multisession.sqlite" user-emacs-directory)
   "File to store multisession variables."
   :type 'file
   :version "29.1"
