@@ -2805,12 +2805,13 @@ of the @var{name} symbol name.  For instance, if @var{name} is
 default to @code{foo}.
 
 @item :synchronized bool
-By default, multisession variables are @dfn{synchronized}.  This means
-that if there's two concurrent Emacs instances running, and the other
-Emacs changes the multisession variable @code{foo-var}, the current
-Emacs instance will retrieve that data when accessing the value.  If
-@var{synchronized} is @code{nil}, this won't happen, and the variable
-in all Emacs sessions will be independent.
+Multisession variables can be @dfn{synchronized} if this keyword is
+non-@code{nil}.  This means that if there's two concurrent Emacs
+instances running, and the other Emacs changes the multisession
+variable @code{foo-var}, the current Emacs instance will retrieve that
+data when accessing the value.  If @var{synchronized} is @code{nil} or
+missing, this won't happen, and the variable in all Emacs sessions
+will be independent.
 @end table
 @end defmac
 

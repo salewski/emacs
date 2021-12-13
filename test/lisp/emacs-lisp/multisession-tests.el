@@ -26,13 +26,15 @@
 (require 'ert-x)
 (require 'cl-lib)
 
-(ert-deftest multi-test ()
+(ert-deftest multi-test-simple ()
   (skip-unless (sqlite-available-p))
   (let ((multisession-database-file (make-temp-name "/tmp/multi"))
         (user-init-file "/tmp/foo.el"))
     (unwind-protect
         (progn
-          (define-multisession-variable foo 0)
+          (define-multisession-variable foo 0
+            ""
+            :synchronized t)
           (should (= (multisession-value foo) 0))
           (cl-incf (multisession-value foo))
           (should (= (multisession-value foo) 1))
@@ -46,14 +48,15 @@
                         (let ((multisession-database-file
                                ,multisession-database-file)
                               (user-init-file "/tmp/foo.el"))
-                          (define-multisession-variable foo 0)
+                          (define-multisession-variable foo 0
+                            ""
+                            :synchronized t)
                           (cl-incf (multisession-value foo))))))
           (should (= (multisession-value foo) 2)))
       (when (file-exists-p multisession-database-file)
         (delete-file multisession-database-file)
         (sqlite-close multisession--db)
         (setq multisession--db nil)))))
-
 
 (ert-deftest multi-test-busy ()
   (skip-unless (sqlite-available-p))
@@ -62,7 +65,9 @@
         proc)
     (unwind-protect
         (progn
-          (define-multisession-variable bar 0)
+          (define-multisession-variable bar 0
+            ""
+            :synchronized t)
           (should (= (multisession-value bar) 0))
           (cl-incf (multisession-value bar))
           (should (= (multisession-value bar) 1))
@@ -78,14 +83,17 @@
                               (let ((multisession-database-file
                                      ,multisession-database-file)
                                     (user-init-file "/tmp/bar.el"))
-                                (define-multisession-variable bar 0)
+                                (define-multisession-variable bar 0
+                                  "" :synchronized t)
                                 (dotimes (i 1000)
                                   (cl-incf (multisession-value bar))))))))
           (while (process-live-p proc)
-            (message "bar is %s" (cl-incf (multisession-value bar)))
+            (ignore-error 'sqlite-locked-error
+              (cl-incf (multisession-value bar)))
+            (message "bar is %s" (multisession-value bar))
             (sleep-for 0.1))
           (message "bar ends up as %s" (multisession-value bar))
-          (should (< (multisession-value bar) 2000)))
+          (should (< (multisession-value bar) 1002)))
       (when (file-exists-p multisession-database-file)
         (delete-file multisession-database-file)
         (sqlite-close multisession--db)

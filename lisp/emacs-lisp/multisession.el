@@ -27,8 +27,6 @@
 (require 'eieio)
 (require 'sqlite)
 
-(define-error 'sqlite-locked-error "database locked")
-
 (defcustom multisession-database-file
   (expand-file-name "multisession.sqlite" user-emacs-directory)
   "File to store multisession variables."
@@ -36,6 +34,7 @@
   :version "29.1"
   :group 'files)
 
+;;;###autoload
 (defmacro define-multisession-variable (name initial-value &optional doc
                                              &rest args)
   "Make NAME into a multisession variable initialized from INITIAL-VALUE.
@@ -56,11 +55,12 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   key
   (initial-value nil)
   package
-  (synchronized t)
-  (cached-value :)
+  (synchronized nil)
+  ;; We need an "impossible" value for the unbound case.
+  (cached-value (make-marker))
   (cached-sequence 0))
 
-(cl-defun make-multisession (&key key initial-value package)
+(cl-defun make-multisession (&key key initial-value package synchronized)
   "Create a multisession object."
   (unless key
     (error "No key for the multisession object"))
@@ -69,6 +69,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                                                     (symbol-name key)))))
   (multisession--create
    :key key
+   :synchronized synchronized
    :initial-value initial-value
    :package package))
 
@@ -91,21 +92,12 @@ DOC should be a doc string, and ARGS are keywords as applicable to
          "create unique index multisession_idx on multisession (package, key)")))))
 
 (defun multisession-value (object)
-  (catch 'done
-    (while t
-      (condition-case nil
-          (throw 'done (multisession-value-1 object))
-        (sqlite-locked-error
-         (message "Sleeping...")
-         (sleep-for 0.1))))))
-
-(defun multisession-value-1 (object)
   "Return the value of the multisession OBJECT."
   (if (or (null user-init-file)
           (not (sqlite-available-p)))
       ;; If we don't have storage, then just return the value from the
       ;; object.
-      (if (eq (multisession--cached-value object) :)
+      (if (markerp (multisession--cached-value object))
           (multisession--initial-value object)
         (multisession--cached-value object))
     ;; We have storage, so we update from storage.
@@ -114,7 +106,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                     (symbol-name (multisession--key object)))))
       (cond
        ;; We have no value yet; check the database.
-       ((eq (multisession--cached-value object) :)
+       ((markerp (multisession--cached-value object))
         (let ((stored
                (car
                 (sqlite-select
@@ -150,12 +142,14 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (defun multisession--set-value (object value)
   (catch 'done
-    (while t
-      (condition-case nil
-          (throw 'done (multisession--set-value-1 object value))
-        (sqlite-locked-error
-         (message "Sleeping...")
-         (sleep-for 0.1))))))
+    (let ((i 0))
+      (while (< i 10)
+        (condition-case nil
+            (throw 'done (multisession--set-value-1 object value))
+          (sqlite-locked-error
+           (setq i (1+ i))
+           (sleep-for (+ 0.1 (/ (float (random 10)) 10))))))
+      (signal 'sqlite-locked-error "Database is locked"))))
 
 (defun multisession--set-value-1 (object value)
   (if (or (null user-init-file)
