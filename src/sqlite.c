@@ -578,6 +578,17 @@ DEFUN ("sqlite-rollback", Fsqlite_rollback, Ssqlite_rollback, 1, 1, 0,
   return sqlite_exec (XSQLITE (db)->db, "rollback");
 }
 
+DEFUN ("sqlite-pragma", Fsqlite_pragma, Ssqlite_pragma, 2, 2, 0,
+       doc: /* Execute PRAGMA in DB.  */)
+  (Lisp_Object db, Lisp_Object pragma)
+{
+  check_sqlite (db, false);
+  CHECK_STRING (pragma);
+
+  return sqlite_exec (XSQLITE (db)->db,
+		      SSDATA (concat2 (build_string ("PRAGMA "), pragma)));
+}
+
 DEFUN ("sqlite-load-extension", Fsqlite_load_extension,
        Ssqlite_load_extension, 2, 2, 0,
        doc: /* Load a an SQlite module into DB.
@@ -693,6 +704,7 @@ syms_of_sqlite (void)
   defsubr (&Ssqlite_transaction);
   defsubr (&Ssqlite_commit);
   defsubr (&Ssqlite_rollback);
+  defsubr (&Ssqlite_pragma);
   defsubr (&Ssqlite_load_extension);
   defsubr (&Ssqlite_next);
   defsubr (&Ssqlite_columns);

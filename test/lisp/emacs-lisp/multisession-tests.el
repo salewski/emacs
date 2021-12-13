@@ -90,10 +90,9 @@
           (while (process-live-p proc)
             (ignore-error 'sqlite-locked-error
               (cl-incf (multisession-value bar)))
-            (message "bar is %s" (multisession-value bar))
             (sleep-for 0.1))
           (message "bar ends up as %s" (multisession-value bar))
-          (should (< (multisession-value bar) 1002)))
+          (should (< (multisession-value bar) 1003)))
       (when (file-exists-p multisession-database-file)
         (delete-file multisession-database-file)
         (sqlite-close multisession--db)
