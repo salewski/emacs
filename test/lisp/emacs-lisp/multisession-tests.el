@@ -89,7 +89,7 @@
                                       (user-init-file "/tmp/bar.el"))
                                   (define-multisession-variable bar 0
                                     "" :synchronized t)
-                                  (dotimes (i 1000)
+                                  (dotimes (i 100)
                                     (cl-incf (multisession-value bar))))))))
             (while (process-live-p proc)
               (ignore-error 'sqlite-locked-error
