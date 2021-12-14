@@ -289,7 +289,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 (cl-defmethod multisession--backend-values ((_type (eql files)))
   (mapcar (lambda (file)
             (let ((bits (file-name-split file)))
-              (list (url-unhex-string (car (last bits 1)))
+              (list (url-unhex-string (car (last bits 2)))
                     (url-unhex-string
                      (file-name-sans-extension (car (last bits))))
                     (with-temp-buffer
@@ -302,9 +302,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (cl-defmethod multisession--backend-delete ((_type (eql files)) id)
   (let ((file (multisession--object-file-name
-               (make-instance 'multisession
-                              :package (car id)
-                              :key (cadr id)))))
+               (make-multisession :package (intern (car id))
+                                  :key (intern (cadr id))))))
     (when (file-exists-p file)
       (delete-file file))))
 
