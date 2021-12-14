@@ -81,7 +81,7 @@
                    "--eval" (prin1-to-string
                              `(progn
                                 (require 'multisession)
-                                (let ((multisession-database-file ,dir)
+                                (let ((multisession-directory ,dir)
                                       (user-init-file "/tmp/bar.el"))
                                   (define-multisession-variable bar 0
                                     "" :synchronized t)
@@ -123,5 +123,41 @@
                         :synchronized t)
                       (cl-incf (multisession-value sfoo))))))
       (should (= (multisession-value sfoo) 2)))))
+
+(ert-deftest multi-test-files-busy ()
+  (skip-unless (and t (sqlite-available-p)))
+  (ert-with-temp-file dir
+    :directory t
+    (let ((user-init-file "/tmp/foo.el")
+          (multisession-storage 'files)
+          (multisession-directory dir)
+          proc)
+      (define-multisession-variable sbar 0
+        ""
+        :synchronized t)
+      (should (= (multisession-value sbar) 0))
+      (cl-incf (multisession-value sbar))
+      (should (= (multisession-value sbar) 1))
+      (setq proc
+            (start-process
+             "other-emacs"
+             nil
+             (concat invocation-directory invocation-name)
+             "-Q" "-batch"
+             "--eval" (prin1-to-string
+                       `(progn
+                          (require 'multisession)
+                          (let ((multisession-directory ,dir)
+                                (multisession-storage 'files)
+                                (user-init-file "/tmp/sbar.el"))
+                            (define-multisession-variable sbar 0
+                              "" :synchronized t)
+                            (dotimes (i 1000)
+                              (cl-incf (multisession-value sbar))))))))
+      (while (process-live-p proc)
+        (cl-incf (multisession-value sbar))
+        (sleep-for 0.1))
+      (message "sbar ends up as %s" (multisession-value sbar))
+      (should (< (multisession-value sbar) 2000)))))
 
 ;;; multisession-tests.el ends here
