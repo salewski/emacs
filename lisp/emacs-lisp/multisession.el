@@ -280,9 +280,13 @@ DOC should be a doc string, and ARGS are keywords as applicable to
             (print-circle t)
             (print-level nil))
         (prin1 value (current-buffer)))
+      ;; Write to a temp file in the same directory and rename to the
+      ;; file for somewhat better atomicity.
       (let ((coding-system-for-write 'utf-8)
-            (create-lockfiles nil))
-        (write-region (point-min) (point-max) file nil 'silent)))
+            (create-lockfiles nil)
+            (temp (make-temp-name file)))
+        (write-region (point-min) (point-max) temp nil 'silent)
+        (rename-file temp file t)))
     (setf (multisession--cached-sequence object) time
           (multisession--cached-value object) value)))
 
