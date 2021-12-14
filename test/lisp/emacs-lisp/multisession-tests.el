@@ -31,6 +31,7 @@
   (ert-with-temp-file dir
     :directory t
     (let ((user-init-file "/tmp/foo.el")
+          (multisession-storage 'sqlite)
           (multisession-directory dir))
       (unwind-protect
           (progn
@@ -48,6 +49,7 @@
                        `(progn
                           (require 'multisession)
                           (let ((multisession-directory ,dir)
+                                (multisession-storage 'sqlite)
                                 (user-init-file "/tmp/foo.el"))
                             (define-multisession-variable foo 0
                               ""
@@ -63,6 +65,7 @@
     :directory t
     (let ((user-init-file "/tmp/foo.el")
           (multisession-directory dir)
+          (multisession-storage 'sqlite)
           proc)
       (unwind-protect
           (progn
@@ -82,6 +85,7 @@
                              `(progn
                                 (require 'multisession)
                                 (let ((multisession-directory ,dir)
+                                      (multisession-storage 'sqlite)
                                       (user-init-file "/tmp/bar.el"))
                                   (define-multisession-variable bar 0
                                     "" :synchronized t)

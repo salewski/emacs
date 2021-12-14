@@ -26,8 +26,9 @@
 (require 'cl-lib)
 (require 'eieio)
 (require 'sqlite)
+(require 'url)
 
-(defcustom multisession-storage 'sqlite
+(defcustom multisession-storage 'files
   "Storage method for multisession variables.
 Valid methods are `sqlite' and `files'."
   :type '(choice (const :tag "SQLite" sqlite)
@@ -288,8 +289,9 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 (cl-defmethod multisession--backend-values ((_type (eql files)))
   (mapcar (lambda (file)
             (let ((bits (file-name-split file)))
-              (list (car (last bits 1))
-                    (file-name-sans-extension (car (last bits)))
+              (list (url-unhex-string (car (last bits 1)))
+                    (url-unhex-string
+                     (file-name-sans-extension (car (last bits))))
                     (with-temp-buffer
                       (let ((coding-system-for-read 'utf-8))
                         (insert-file-contents file)
