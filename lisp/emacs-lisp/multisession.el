@@ -212,6 +212,92 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                   "delete from multisession where package = ? and key = ?"
                   id))
 
+;; Files Backend
+
+(defun multisession--encode-file-name (name)
+  (url-hexify-string name))
+
+(defun multisession--update-file-value (file object)
+  (with-temp-buffer
+    (let* ((time (file-attribute-modification-time
+                  (file-attributes file)))
+           (coding-system-for-read 'utf-8))
+      (insert-file-contents file)
+      (let ((stored (read (current-buffer))))
+        (setf (multisession--cached-value object) stored
+              (multisession--cached-sequence object) time)
+        stored))))
+
+(defun multisession--object-file-name (object)
+  (expand-file-name
+   (concat "files/"
+           (multisession--encode-file-name
+            (symbol-name (multisession--package object)))
+           "/"
+           (multisession--encode-file-name
+            (symbol-name (multisession--key object)))
+           ".value")
+   multisession-directory))
+
+(cl-defmethod multisession-backend-value ((_type (eql files)) object)
+  (let ((file (multisession--object-file-name object)))
+    (cond
+     ;; We have no value yet; see whether it's stored.
+     ((markerp (multisession--cached-value object))
+      (if (file-exists-p file)
+          (multisession--update-file-value file object)
+        ;; Nope; return the initial value.
+        (multisession--initial-value object)))
+     ;; We have a value, but we want to update in case some other
+     ;; Emacs instance has updated.
+     ((multisession--synchronized object)
+      (if (and (file-exists-p file)
+               (time-less-p (multisession--cached-sequence object)
+                            (file-attribute-modification-time
+                             (file-attributes file))))
+          (multisession--update-file-value file object)
+        ;; Nothing, return the cached value.
+        (multisession--cached-value object)))
+     ;; Just return the cached value.
+     (t
+      (multisession--cached-value object)))))
+
+(cl-defmethod multisession--backend-set-value ((_type (eql files))
+                                               object value)
+  (let ((file (multisession--object-file-name object))
+        (time (current-time)))
+    ;; Ensure that the directory exists.
+    (let ((dir (file-name-directory file)))
+      (unless (file-exists-p dir)
+        (make-directory dir t)))
+    (with-temp-buffer
+      (prin1 value (current-buffer))
+      (let ((coding-system-for-write 'utf-8))
+        (write-region (point-min) (point-max) file nil 'silent)))
+    (setf (multisession--cached-sequence object) time
+          (multisession--cached-value object) value)))
+
+(cl-defmethod multisession--backend-values ((_type (eql files)))
+  (mapcar (lambda (file)
+            (let ((bits (file-name-split file)))
+              (list (car (last bits 1))
+                    (file-name-sans-extension (car (last bits)))
+                    (with-temp-buffer
+                      (let ((coding-system-for-read 'utf-8))
+                        (insert-file-contents file)
+                        (read (current-buffer)))))))
+          (directory-files-recursively
+           (expand-file-name "files" multisession-directory)
+           "\\.value\\'")))
+
+(cl-defmethod multisession--backend-delete ((_type (eql files)) id)
+  (let ((file (multisession--object-file-name
+               (make-instance 'multisession
+                              :package (car id)
+                              :key (cadr id)))))
+    (when (file-exists-p file)
+      (delete-file file))))
+
 ;; (define-multisession-variable foo 'bar)
 ;; (multisession-value foo)
 ;; (multisession--set-value foo 'zot)

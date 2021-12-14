@@ -26,7 +26,7 @@
 (require 'ert-x)
 (require 'cl-lib)
 
-(ert-deftest multi-test-simple ()
+(ert-deftest multi-test-sqlite-simple ()
   (skip-unless (sqlite-available-p))
   (ert-with-temp-file dir
     :directory t
@@ -57,7 +57,7 @@
         (sqlite-close multisession--db)
         (setq multisession--db nil)))))
 
-(ert-deftest multi-test-busy ()
+(ert-deftest multi-test-sqlite-busy ()
   (skip-unless (and t (sqlite-available-p)))
   (ert-with-temp-file dir
     :directory t
@@ -95,5 +95,33 @@
             (should (< (multisession-value bar) 1003)))
         (sqlite-close multisession--db)
         (setq multisession--db nil)))))
+
+(ert-deftest multi-test-files-simple ()
+  (ert-with-temp-file dir
+    :directory t
+    (let ((user-init-file "/tmp/sfoo.el")
+          (multisession-storage 'files)
+          (multisession-directory dir))
+      (define-multisession-variable sfoo 0
+        ""
+        :synchronized t)
+      (should (= (multisession-value sfoo) 0))
+      (cl-incf (multisession-value sfoo))
+      (should (= (multisession-value sfoo) 1))
+      (call-process
+       (concat invocation-directory invocation-name)
+       nil t nil
+       "-Q" "-batch"
+       "--eval" (prin1-to-string
+                 `(progn
+                    (require 'multisession)
+                    (let ((multisession-directory ,dir)
+                          (multisession-storage 'files)
+                          (user-init-file "/tmp/sfoo.el"))
+                      (define-multisession-variable sfoo 0
+                        ""
+                        :synchronized t)
+                      (cl-incf (multisession-value sfoo))))))
+      (should (= (multisession-value sfoo) 2)))))
 
 ;;; multisession-tests.el ends here
