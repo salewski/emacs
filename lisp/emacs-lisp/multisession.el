@@ -116,13 +116,13 @@ DOC should be a doc string, and ARGS are keywords as applicable to
         (make-directory dir t))
       (setq multisession--db (sqlite-open file)))
     (with-sqlite-transaction multisession--db
+      ;; Use a write-ahead-log (available since 2010), which makes
+      ;; writes a lot faster.
+      (sqlite-pragma multisession--db "journal_mode = WAL")
+      (sqlite-pragma multisession--db "synchronous = NORMAL")
       (unless (sqlite-select
                multisession--db
                "select name from sqlite_master where type = 'table' and name = 'multisession'")
-        ;; Use a write-ahead-log (available since 2010), which makes
-        ;; writes a lot faster.
-        (sqlite-pragma multisession--db "journal_mode = WAL")
-        (sqlite-pragma multisession--db "bsynchronous = NORMAL")
         ;; Tidy up the database automatically.
         (sqlite-pragma multisession--db "auto_vacuum = FULL")
         ;; Create the table.
