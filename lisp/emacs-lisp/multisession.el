@@ -85,8 +85,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (defun multisession-value (object)
   "Return the value of the multisession OBJECT."
-  (if (or (null user-init-file)
-          (not (sqlite-available-p)))
+  (if (null user-init-file)
       ;; If we don't have storage, then just return the value from the
       ;; object.
       (if (markerp (multisession--cached-value object))
@@ -96,8 +95,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
     (multisession-backend-value multisession-storage object)))
 
 (defun multisession--set-value (object value)
-  (if (or (null user-init-file)
-          (not (sqlite-available-p)))
+  (if (null user-init-file)
       ;; We have no backend, so just store the value.
       (setf (multisession--cached-value object) value)
     ;; We have a backend.
