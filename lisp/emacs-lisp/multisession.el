@@ -311,11 +311,6 @@ DOC should be a doc string, and ARGS are keywords as applicable to
     (when (file-exists-p file)
       (delete-file file))))
 
-;; (define-multisession-variable foo 'bar)
-;; (multisession-value foo)
-;; (multisession--set-value foo 'zot)
-;; (setf (multisession-value foo) 'gazonk)
-
 ;; Mode for editing.
 
 (defvar-keymap multisession-edit-mode-map
@@ -329,9 +324,9 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (setq-local buffer-read-only t
               truncate-lines t)
   (setq tabulated-list-format
-        `[("Package" 10)
-          ("Key" 30)
-          ("Value" 30)])
+        [("Package" 10)
+         ("Key" 30)
+         ("Value" 30)])
   (setq-local revert-buffer-function #'multisession-edit-mode--revert))
 
 ;;;###autoload
