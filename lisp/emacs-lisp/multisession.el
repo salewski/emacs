@@ -28,7 +28,8 @@
 (require 'sqlite)
 
 (defcustom multisession-database-file
-  (expand-file-name "multisession.sqlite" user-emacs-directory)
+  (expand-file-name "multisession/sqlite/multisession.sqlite"
+                    user-emacs-directory)
   "File to store multisession variables."
   :type 'file
   :version "29.1"
@@ -77,6 +78,9 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (defun multisession--ensure-db ()
   (unless multisession--db
+    (let ((dir (file-name-directory multisession-database-file)))
+      (unless (file-exists-p dir)
+        (make-directory dir t)))
     (setq multisession--db (sqlite-open multisession-database-file))
     (with-sqlite-transaction multisession--db
       (unless (sqlite-select
