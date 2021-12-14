@@ -27,6 +27,7 @@
 (require 'eieio)
 (require 'sqlite)
 (require 'url)
+(require 'tabulated-list)
 
 (defcustom multisession-storage 'files
   "Storage method for multisession variables.
@@ -315,13 +316,20 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 ;; Mode for editing.
 
 (defvar-keymap multisession-edit-mode-map
+  :parent tabulated-list-mode-map
   "d" #'multisession-delete-value)
 
 (define-derived-mode multisession-edit-mode special-mode "Multisession"
   "This mode lists all elements in the \"multisession\" database."
   :interactive nil
   (buffer-disable-undo)
-  (setq-local buffer-read-only t))
+  (setq-local buffer-read-only t
+              truncate-lines t)
+  (setq tabulated-list-format
+        `[("Package" 10)
+          ("Key" 30)
+          ("Value" 30)])
+  (setq revert-buffer-function #'multisession-edit-mode--revert))
 
 ;;;###autoload
 (defun list-multisession-values ()
@@ -329,15 +337,22 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (interactive)
   (multisession--ensure-db)
   (pop-to-buffer (get-buffer-create "*Multisession*"))
+  (multisession-edit-mode)
+  (multisession-edit-mode--revert)
+  (goto-char (point-min)))
+
+(defun multisession-edit-mode--revert (&rest _)
   (let ((inhibit-read-only t))
     (erase-buffer)
-    (cl-loop for (package key value)
-             in (multisession--backend-values multisession-storage)
-             do (insert (propertize (format "%s %s %s\n"
-                                            package key value)
-                                    'multisession--id (list package key))))
-    (goto-char (point-min)))
-  (multisession-edit-mode))
+    (tabulated-list-init-header)
+    (setq tabulated-list-entries
+          (mapcar (lambda (elem)
+                    (list
+                     (cons (car elem) (cadr elem))
+                     (vector (car elem) (cadr elem)
+                             (format "%s" (caddr elem)))))
+                  (multisession--backend-values multisession-storage)))
+    (tabulated-list-print t)))
 
 (defun multisession-delete-value (id)
   "Delete the value at point."
