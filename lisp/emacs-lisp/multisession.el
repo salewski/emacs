@@ -207,6 +207,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
       (setf (multisession--cached-value object) value))))
 
 (cl-defmethod multisession--backend-values ((_type (eql sqlite)))
+  (multisession--ensure-db)
   (sqlite-select
    multisession--db
    "select package, key, value from multisession order by package, key"))
@@ -333,7 +334,6 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 (defun list-multisession-values ()
   "List all values in the \"multisession\" database."
   (interactive)
-  (multisession--ensure-db)
   (pop-to-buffer (get-buffer-create "*Multisession*"))
   (multisession-edit-mode)
   (multisession-edit-mode--revert)
