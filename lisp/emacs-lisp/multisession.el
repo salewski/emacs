@@ -327,7 +327,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
         `[("Package" 10)
           ("Key" 30)
           ("Value" 30)])
-  (setq revert-buffer-function #'multisession-edit-mode--revert))
+  (setq-local revert-buffer-function #'multisession-edit-mode--revert))
 
 ;;;###autoload
 (defun list-multisession-values ()
