@@ -105,6 +105,11 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 ;; SQLite Backend
 
+(declare-function sqlite-execute "sqlite.c")
+(declare-function sqlite-select "sqlite.c")
+(declare-function sqlite-open "sqlite.c")
+(declare-function sqlite-pragma "sqlite.c")
+
 (defvar multisession--db nil)
 
 (defun multisession--ensure-db ()
