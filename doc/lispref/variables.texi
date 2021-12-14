@@ -2848,6 +2848,19 @@ instances are updating the value at the same time, it's unpredictable
 which instance ``wins''.
 @end defun
 
+@defopt multisession-storage
+This variable controls how the multisession variables are stored.  This
+value defaults to @code{files}, which means that the values are stored
+inin a one-file-per-value structure.  If this value is @code{sqlite}
+instead, the values are stored in an SQLite database instead.
+@end defopt
+
+@defopt multisession-directory
+The multisession variables are stored under this directory, and it
+defaults to @file{multisession/} under @code{user-emacs-directory},
+typically @file{~/.emacs.d/multisession/}.
+@end defopt
+
 @defun list-multisession-values
 This function will pop up a new window that lists all multisession
 variables, and allows you to delete and edit them.
