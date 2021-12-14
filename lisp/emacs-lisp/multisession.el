@@ -190,7 +190,11 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (with-sqlite-transaction multisession--db
     (let ((id (list (symbol-name (multisession--package object))
                     (symbol-name (multisession--key object))))
-          (pvalue (prin1-to-string value)))
+          (pvalue
+           (let ((print-length nil)
+                 (print-circle t)
+                 (print-level nil))
+             (prin1-to-string value))))
       (sqlite-execute
        multisession--db
        "insert into multisession(package, key, sequence, value) values(?, ?, 1, ?) on conflict(package, key) do update set sequence = sequence + 1, value = ?"
@@ -271,8 +275,12 @@ DOC should be a doc string, and ARGS are keywords as applicable to
       (unless (file-exists-p dir)
         (make-directory dir t)))
     (with-temp-buffer
-      (prin1 value (current-buffer))
-      (let ((coding-system-for-write 'utf-8))
+      (let ((print-length nil)
+            (print-circle t)
+            (print-level nil))
+        (prin1 value (current-buffer)))
+      (let ((coding-system-for-write 'utf-8)
+            (create-lockfiles nil))
         (write-region (point-min) (point-max) file nil 'silent)))
     (setf (multisession--cached-sequence object) time
           (multisession--cached-value object) value)))
