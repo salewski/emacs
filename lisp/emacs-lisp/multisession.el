@@ -218,8 +218,9 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                  (print-circle t)
                  (print-level nil))
              (prin1-to-string value))))
-      (when (string-match-p "\\`#" pvalue)
-        (error "Unable to store unreadable value: %s" pvalue))
+      (condition-case nil
+          (read-from-string pvalue)
+        (error (error "Unable to store unreadable value: %s" pvalue)))
       (sqlite-execute
        multisession--db
        "insert into multisession(package, key, sequence, value) values(?, ?, 1, ?) on conflict(package, key) do update set sequence = sequence + 1, value = ?"
@@ -305,8 +306,9 @@ DOC should be a doc string, and ARGS are keywords as applicable to
             (print-level nil))
         (prin1 value (current-buffer)))
       (goto-char (point-min))
-      (when (looking-at-p "#")
-        (error "Unable to store unreadable value: %s" (buffer-string)))
+      (condition-case nil
+          (read (current-buffer))
+        (error (error "Unable to store unreadable value: %s" (buffer-string))))
       ;; Write to a temp file in the same directory and rename to the
       ;; file for somewhat better atomicity.
       (let ((coding-system-for-write 'utf-8)
