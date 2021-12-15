@@ -77,7 +77,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (cached-value multisession--unbound)
   (cached-sequence 0))
 
-(cl-defun make-multisession (&key key initial-value package synchronized)
+(cl-defun make-multisession (&key key initial-value package synchronized
+                                  storage)
   "Create a multisession object."
   (unless package
     (error "No package for the multisession object"))
@@ -91,7 +92,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
    :key key
    :synchronized synchronized
    :initial-value initial-value
-   :package package))
+   :package package
+   :storage (or storage multisession-storage)))
 
 (defun multisession-value (object)
   "Return the value of the multisession OBJECT."
