@@ -83,6 +83,10 @@ DOC should be a doc string, and ARGS are keywords as applicable to
     (error "No package for the multisession object"))
   (unless key
     (error "No key for the multisession object"))
+  (unless (stringp package)
+    (error "The package has to be a string"))
+  (unless (stringp key)
+    (error "The key has to be a string"))
   (multisession--create
    :key key
    :synchronized synchronized

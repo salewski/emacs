@@ -2812,6 +2812,11 @@ variable @code{foo-var}, the current Emacs instance will retrieve that
 data when accessing the value.  If @var{synchronized} is @code{nil} or
 missing, this won't happen, and the variable in all Emacs sessions
 will be independent.
+
+@item :storage storage
+The storage method to use.  This can be either @code{sqlite} (on Emacs
+versions with SQLite support) or @code{files}.  If not given, this
+defaults to the value of the @code{multisession-storage} variable.
 @end table
 @end defmac
 
@@ -2846,6 +2851,21 @@ Emacs instance, retrieve that value, and then add 1 to that value, and
 then store it.  But note that this is done without locking, so if many
 instances are updating the value at the same time, it's unpredictable
 which instance ``wins''.
+@end defun
+
+@defun make-multisession
+You can also make persistent values that aren't tied to a specific
+variable, but is tied to an explicit package and key.
+
+@example
+(setq foo (make-multisession :package "mail"
+                             :key "friends"))
+(setf (multisession-value foo) 'everybody)
+@end example
+
+This supports the same keywords as
+@code{define-multisession-variable}, but also supports a
+@code{:initial-value} keyword, which specifies the default value.
 @end defun
 
 @defopt multisession-storage
