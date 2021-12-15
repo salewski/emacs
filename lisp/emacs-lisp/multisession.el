@@ -381,7 +381,8 @@ storage method to list."
                     (list
                      (cons (car elem) (cadr elem))
                      (vector (car elem) (cadr elem)
-                             (format "%s" (caddr elem)))))
+                             (string-replace "\n" "\\n"
+                                             (format "%s" (caddr elem))))))
                   (multisession--backend-values multisession-storage)))
     (tabulated-list-print t)
     (goto-char (point-min))
