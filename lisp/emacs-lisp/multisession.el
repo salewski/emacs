@@ -72,6 +72,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   key
   (initial-value nil)
   package
+  (storage multisession-storage)
   (synchronized nil)
   (cached-value multisession--unbound)
   (cached-sequence 0))
@@ -97,14 +98,15 @@ DOC should be a doc string, and ARGS are keywords as applicable to
           (multisession--initial-value object)
         (multisession--cached-value object))
     ;; We have storage, so we update from storage.
-    (multisession-backend-value multisession-storage object)))
+    (multisession-backend-value (multisession--storage object) object)))
 
 (defun multisession--set-value (object value)
   (if (null user-init-file)
       ;; We have no backend, so just store the value.
       (setf (multisession--cached-value object) value)
     ;; We have a backend.
-    (multisession--backend-set-value multisession-storage object value)))
+    (multisession--backend-set-value (multisession--storage object)
+                                     object value)))
 
 (gv-define-simple-setter multisession-value multisession--set-value)
 
