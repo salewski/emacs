@@ -167,4 +167,35 @@
       (message "sbar ends up as %s" (multisession-value sbar))
       (should (< (multisession-value sbar) 2000)))))
 
+(ert-deftest multi-test-files-some-values ()
+  (ert-with-temp-file dir
+    :directory t
+    (let ((user-init-file "/tmp/sfoo.el")
+          (multisession-storage 'files)
+          (multisession-directory dir))
+      (define-multisession-variable foo1 nil)
+      (should (eq (multisession-value foo1) nil))
+      (setf (multisession-value foo1) nil)
+      (should (eq (multisession-value foo1) nil))
+      (setf (multisession-value foo1) t)
+      (should (eq (multisession-value foo1) t))
+
+      (define-multisession-variable foo2 t)
+      (setf (multisession-value foo2) nil)
+      (should (eq (multisession-value foo2) nil))
+      (setf (multisession-value foo2) t)
+      (should (eq (multisession-value foo2) t))
+
+      (define-multisession-variable foo3 t)
+      (should-error (setf (multisession-value foo3) (make-marker)))
+
+      (let ((string (with-temp-buffer
+                      (set-buffer-multibyte nil)
+                      (insert 0 1 2)
+                      (buffer-string))))
+        (should-not (multibyte-string-p string))
+        (define-multisession-variable foo4 nil)
+        (setf (multisession-value foo4) string)
+        (should (equal (multisession-value foo4) string))))))
+
 ;;; multisession-tests.el ends here

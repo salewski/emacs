@@ -219,7 +219,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                  (print-level nil))
              (prin1-to-string value))))
       (condition-case nil
-          (read-from-string pvalue)
+          (ignore (read-from-string pvalue))
         (error (error "Unable to store unreadable value: %s" pvalue)))
       (sqlite-execute
        multisession--db
