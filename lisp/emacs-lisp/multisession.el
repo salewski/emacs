@@ -367,7 +367,8 @@ storage method to list."
     (goto-char (point-min))))
 
 (defun multisession-edit-mode--revert (&rest _)
-  (let ((inhibit-read-only t))
+  (let ((inhibit-read-only t)
+        (id (get-text-property (point) 'tabulated-list-id)))
     (erase-buffer)
     (tabulated-list-init-header)
     (setq tabulated-list-entries
@@ -377,7 +378,12 @@ storage method to list."
                      (vector (car elem) (cadr elem)
                              (format "%s" (caddr elem)))))
                   (multisession--backend-values multisession-storage)))
-    (tabulated-list-print t)))
+    (tabulated-list-print t)
+    (goto-char (point-min))
+    (when id
+      (when-let ((match
+                  (text-property-search-forward 'tabulated-list-id id t)))
+        (goto-char (prop-match-beginning match))))))
 
 (defun multisession-delete-value (id)
   "Delete the value at point."
