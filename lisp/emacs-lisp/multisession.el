@@ -335,7 +335,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (defvar-keymap multisession-edit-mode-map
   :parent tabulated-list-mode-map
-  "d" #'multisession-delete-value)
+  "d" #'multisession-delete-value
+  "e" #'multisession-edit-value)
 
 (define-derived-mode multisession-edit-mode special-mode "Multisession"
   "This mode lists all elements in the \"multisession\" database."
@@ -392,6 +393,22 @@ storage method to list."
   (let ((inhibit-read-only t))
     (beginning-of-line)
     (delete-region (point) (progn (forward-line 1) (point)))))
+
+(defun multisession-edit-value (id)
+  "Edit the value at point."
+  (interactive (list (get-text-property (point) 'tabulated-list-id))
+               multisession-edit-mode)
+  (unless id
+    (error "No value on the current line"))
+  (let* ((object (make-multisession
+                  :package (car id)
+                  :key (cdr id)
+                  :storage multisession-storage))
+         (value (multisession-value object)))
+    (setf (multisession-value object)
+          (car (read-from-string
+                (read-string "New value: " (prin1-to-string value))))))
+  (multisession-edit-mode--revert))
 
 (provide 'multisession)
 
