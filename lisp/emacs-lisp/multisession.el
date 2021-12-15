@@ -57,6 +57,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                         ,@args)
      ,@(list doc)))
 
+(defconst multisession--unbound (make-symbol "unbound"))
+
 (cl-defstruct (multisession
                (:constructor nil)
                (:constructor multisession--create)
@@ -66,8 +68,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (initial-value nil)
   package
   (synchronized nil)
-  ;; We need an "impossible" value for the unbound case.
-  (cached-value (make-marker))
+  (cached-value multisession--unbound)
   (cached-sequence 0))
 
 (cl-defun make-multisession (&key key initial-value package synchronized)
@@ -88,7 +89,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (if (null user-init-file)
       ;; If we don't have storage, then just return the value from the
       ;; object.
-      (if (markerp (multisession--cached-value object))
+      (if (eq (multisession--cached-value object) multisession--unbound)
           (multisession--initial-value object)
         (multisession--cached-value object))
     ;; We have storage, so we update from storage.
@@ -144,7 +145,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                   (symbol-name (multisession--key object)))))
     (cond
      ;; We have no value yet; check the database.
-     ((markerp (multisession--cached-value object))
+     ((eq (multisession--cached-value object) multisession--unbound)
       (let ((stored
              (car
               (sqlite-select
@@ -253,7 +254,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (let ((file (multisession--object-file-name object)))
     (cond
      ;; We have no value yet; see whether it's stored.
-     ((markerp (multisession--cached-value object))
+     ((eq (multisession--cached-value object) multisession--unbound)
       (if (file-exists-p file)
           (multisession--update-file-value file object)
         ;; Nope; return the initial value.
