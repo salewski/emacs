@@ -2853,6 +2853,10 @@ instances are updating the value at the same time, it's unpredictable
 which instance ``wins''.
 @end defun
 
+@defun multisession-delete object
+This function will delete the value from the backend storage.
+@end defun
+
 @defun make-multisession
 You can also make persistent values that aren't tied to a specific
 variable, but is tied to an explicit package and key.

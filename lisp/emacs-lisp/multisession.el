@@ -105,12 +105,17 @@ DOC should be a doc string, and ARGS are keywords as applicable to
     (multisession-backend-value (multisession--storage object) object)))
 
 (defun multisession--set-value (object value)
+  "Set the stored value of OBJECT to VALUE."
   (if (null user-init-file)
       ;; We have no backend, so just store the value.
       (setf (multisession--cached-value object) value)
     ;; We have a backend.
     (multisession--backend-set-value (multisession--storage object)
                                      object value)))
+
+(defun multisession-delete (object)
+  "Delete OBJECT from the backend storage."
+  (multisession--backend-delete (multisession--storage object) object))
 
 (gv-define-simple-setter multisession-value multisession--set-value)
 
@@ -228,10 +233,11 @@ DOC should be a doc string, and ARGS are keywords as applicable to
    multisession--db
    "select package, key, value from multisession order by package, key"))
 
-(cl-defmethod multisession--backend-delete ((_type (eql sqlite)) id)
+(cl-defmethod multisession--backend-delete ((_type (eql sqlite)) object)
   (sqlite-execute multisession--db
                   "delete from multisession where package = ? and key = ?"
-                  id))
+                  (list (multisession--package object)
+                        (multisession--key object))))
 
 ;; Files Backend
 
@@ -318,10 +324,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
            (expand-file-name "files" multisession-directory)
            "\\.value\\'")))
 
-(cl-defmethod multisession--backend-delete ((_type (eql files)) id)
-  (let ((file (multisession--object-file-name
-               (make-multisession :package (car id)
-                                  :key (cadr id)))))
+(cl-defmethod multisession--backend-delete ((_type (eql files)) object)
+  (let ((file (multisession--object-file-name object)))
     (when (file-exists-p file)
       (delete-file file))))
 
@@ -344,13 +348,20 @@ DOC should be a doc string, and ARGS are keywords as applicable to
   (setq-local revert-buffer-function #'multisession-edit-mode--revert))
 
 ;;;###autoload
-(defun list-multisession-values ()
-  "List all values in the \"multisession\" database."
-  (interactive)
-  (pop-to-buffer (get-buffer-create "*Multisession*"))
-  (multisession-edit-mode)
-  (multisession-edit-mode--revert)
-  (goto-char (point-min)))
+(defun list-multisession-values (&optional choose-storage)
+  "List all values in the \"multisession\" database.
+If CHOOSE-STORAGE (interactively, the prefix), query for the
+storage method to list."
+  (interactive "P")
+  (let ((storage
+         (if choose-storage
+             (intern (completing-read "Storage method: " '(sqlite files) nil t))
+           multisession-storage)))
+    (pop-to-buffer (get-buffer-create "*Multisession*"))
+    (multisession-edit-mode)
+    (setq-local multisession-storage storage)
+    (multisession-edit-mode--revert)
+    (goto-char (point-min))))
 
 (defun multisession-edit-mode--revert (&rest _)
   (let ((inhibit-read-only t))
@@ -367,11 +378,15 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (defun multisession-delete-value (id)
   "Delete the value at point."
-  (interactive (list (get-text-property (point) 'multisession--id))
+  (interactive (list (get-text-property (point) 'tabulated-list-id))
                multisession-edit-mode)
   (unless id
     (error "No value on the current line"))
-  (multisession--backend-delete multisession-storage id)
+  (unless (yes-or-no-p "Really delete this item? ")
+    (user-error "Not deleting"))
+  (multisession--backend-delete multisession-storage
+                                (make-multisession :package (car id)
+                                                   :key (cdr id)))
   (let ((inhibit-read-only t))
     (beginning-of-line)
     (delete-region (point) (progn (forward-line 1) (point)))))
