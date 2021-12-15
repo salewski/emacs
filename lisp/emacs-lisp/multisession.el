@@ -51,8 +51,13 @@ Valid methods are `sqlite' and `files'."
 DOC should be a doc string, and ARGS are keywords as applicable to
 `make-multisession'."
   (declare (indent defun))
+  (unless (plist-get args :package)
+    (setq args (nconc (list :package
+                            (replace-regexp-in-string "-.*" ""
+                                                      (symbol-name name)))
+                      args)))
   `(defvar ,name
-     (make-multisession :key ',name
+     (make-multisession :key ,(symbol-name name)
                         :initial-value ,initial-value
                         ,@args)
      ,@(list doc)))
@@ -73,11 +78,10 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (cl-defun make-multisession (&key key initial-value package synchronized)
   "Create a multisession object."
+  (unless package
+    (error "No package for the multisession object"))
   (unless key
     (error "No key for the multisession object"))
-  (unless package
-    (setq package (intern (replace-regexp-in-string "-.*" ""
-                                                    (symbol-name key)))))
   (multisession--create
    :key key
    :synchronized synchronized
@@ -141,8 +145,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (cl-defmethod multisession-backend-value ((_type (eql sqlite)) object)
   (multisession--ensure-db)
-  (let ((id (list (symbol-name (multisession--package object))
-                  (symbol-name (multisession--key object)))))
+  (let ((id (list (multisession--package object)
+                  (multisession--key object))))
     (cond
      ;; We have no value yet; check the database.
      ((eq (multisession--cached-value object) multisession--unbound)
@@ -194,8 +198,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 (defun multisession--set-value-sqlite (object value)
   (multisession--ensure-db)
   (with-sqlite-transaction multisession--db
-    (let ((id (list (symbol-name (multisession--package object))
-                    (symbol-name (multisession--key object))))
+    (let ((id (list (multisession--package object)
+                    (multisession--key object)))
           (pvalue
            (let ((print-length nil)
                  (print-circle t)
@@ -242,11 +246,9 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 (defun multisession--object-file-name (object)
   (expand-file-name
    (concat "files/"
-           (multisession--encode-file-name
-            (symbol-name (multisession--package object)))
+           (multisession--encode-file-name (multisession--package object))
            "/"
-           (multisession--encode-file-name
-            (symbol-name (multisession--key object)))
+           (multisession--encode-file-name (multisession--key object))
            ".value")
    multisession-directory))
 
@@ -312,8 +314,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
 
 (cl-defmethod multisession--backend-delete ((_type (eql files)) id)
   (let ((file (multisession--object-file-name
-               (make-multisession :package (intern (car id))
-                                  :key (intern (cadr id))))))
+               (make-multisession :package (car id)
+                                  :key (cadr id)))))
     (when (file-exists-p file)
       (delete-file file))))
 
