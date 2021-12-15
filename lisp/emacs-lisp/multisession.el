@@ -218,6 +218,8 @@ DOC should be a doc string, and ARGS are keywords as applicable to
                  (print-circle t)
                  (print-level nil))
              (prin1-to-string value))))
+      (when (string-match-p "\\`#" pvalue)
+        (error "Unable to store unreadable value: %s" pvalue))
       (sqlite-execute
        multisession--db
        "insert into multisession(package, key, sequence, value) values(?, ?, 1, ?) on conflict(package, key) do update set sequence = sequence + 1, value = ?"
@@ -302,6 +304,9 @@ DOC should be a doc string, and ARGS are keywords as applicable to
             (print-circle t)
             (print-level nil))
         (prin1 value (current-buffer)))
+      (goto-char (point-min))
+      (when (looking-at-p "\\`#")
+        (error "Unable to store unreadable value: %s" (buffer-string)))
       ;; Write to a temp file in the same directory and rename to the
       ;; file for somewhat better atomicity.
       (let ((coding-system-for-write 'utf-8)
@@ -360,7 +365,7 @@ storage method to list."
          (if choose-storage
              (intern (completing-read "Storage method: " '(sqlite files) nil t))
            multisession-storage)))
-    (pop-to-buffer (get-buffer-create "*Multisession*"))
+    (pop-to-buffer (get-buffer-create (format "*Multisession %s*" storage)))
     (multisession-edit-mode)
     (setq-local multisession-storage storage)
     (multisession-edit-mode--revert)
