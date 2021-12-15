@@ -305,7 +305,7 @@ DOC should be a doc string, and ARGS are keywords as applicable to
             (print-level nil))
         (prin1 value (current-buffer)))
       (goto-char (point-min))
-      (when (looking-at-p "\\`#")
+      (when (looking-at-p "#")
         (error "Unable to store unreadable value: %s" (buffer-string)))
       ;; Write to a temp file in the same directory and rename to the
       ;; file for somewhat better atomicity.
